@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "winvault"
-version = "0.3.0"
+version = "0.4.0"
 description = "WinVault — Digital Evidence & Forensic Analysis: security-focused change analysis for Windows"
 readme = "README.md"
 license = { text = "MIT" }
@@ -25,6 +25,9 @@ gui = ["PySide6>=6.6"]
 
 [project.scripts]
 winvault = "winvault.cli:main"
+
+[project.gui-scripts]
+winvault-gui = "winvault.gui:run"
 
 [tool.setuptools.packages.find]
 include = ["winvault*"]

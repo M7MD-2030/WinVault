@@ -43,10 +43,15 @@
 - [x] `scripts/Enable-WinVaultAuditing.ps1` (language-independent subcategory GUIDs)
 - [ ] Later: PowerShell 4104 script blocks, Sysmon (1/12/13), registry SACL-based 4657
 
-## Phase 4 — GUI (PySide6)
-- [ ] Baseline / Compare buttons, dashboard counts per risk level
-- [ ] Change details pane: before/after, score breakdown, evidence, hashes
-- [ ] Timeline view
+## Phase 4 — GUI (PySide6) ✅
+- [x] `winvault/service.py` — one pipeline (capture → compare → analyze → correlate) shared by CLI and GUI
+- [x] `winvault/presentation.py` — Qt-free rendering (colours, labels, finding details HTML) reused by the Phase 5 report
+- [x] Toolbar: Create Baseline · Compare Now · Compare Snapshots · Export JSON · Snapshot Store
+- [x] Dashboard tiles per risk level + noise; findings table (severity-sorted, filter, show-noise toggle)
+- [x] Details pane: score breakdown, before/after, attribution, grouped evidence
+- [x] Timeline tab; Snapshots tab with integrity verification and offline compare
+- [x] Background worker thread (UI never freezes), elevation / alert / coverage banner
+- [x] Headless smoke tests (Qt offscreen) run in CI on Windows
 
 ## Phase 5 — Reporting & packaging
 - [ ] HTML (Jinja2) + JSON report, PDF via HTML

@@ -254,7 +254,9 @@ def correlate(result: ComparisonResult, current: dict, baseline: dict | None = N
         if anchors:
             primary = anchors[0]
             when, when_source = primary["_t"], f"event {primary['event_id']}"
-            actor = actor_of(primary, ctx.name_by_sid)
+            # Prefer an event that carries a full DOMAIN\user subject (e.g. 4697 over 7045).
+            with_subject = next((e for e in anchors if (e["data"].get("SubjectUserName") or "-") != "-"), primary)
+            actor = actor_of(with_subject, ctx.name_by_sid)
         else:
             when, when_source = _artifact_time(change)
 
@@ -318,7 +320,7 @@ def build_timeline(result: ComparisonResult) -> list[dict]:
             entries.append({"time": ev["time"], "kind": "process" if ev["role"] == "process" else "event",
                             "text": f"[{ev['event_id']}] {ev['summary']}", "change": change.key})
         when = change.attribution.get("when")
-        entries.append({"time": when, "kind": "change",
+        entries.append({"time": when, "kind": "change", "level": change.level,
                         "text": f"{change.level.upper()} {change.status.value} {change.category}: "
                                 f"{change.item.get('name') or change.key}",
                         "change": change.key,

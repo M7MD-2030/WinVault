@@ -7,15 +7,24 @@ on:
 jobs:
   unit-tests:
     strategy:
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        include:
+          - os: ubuntu-latest     # oldest supported Python, core only
+            python: "3.10"
+            extras: "dev"
+          - os: windows-latest    # target platform, incl. the desktop app (headless)
+            python: "3.12"
+            extras: "dev,gui"
     runs-on: ${{ matrix.os }}
+    env:
+      QT_QPA_PLATFORM: offscreen
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-      - run: pip install -e ".[dev]"
+          python-version: ${{ matrix.python }}
+      - run: pip install -e ".[${{ matrix.extras }}]"
       - run: pytest -q
 
   # GitHub's Windows runners are elevated, so this exercises every live

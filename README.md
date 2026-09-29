@@ -22,7 +22,7 @@ Detect → Filter → Analyze → Correlate → Explain → Report
 | **1 — MVP** | Registry, Services, Scheduled Tasks, Users & Groups, Startup collectors · snapshot store · comparison engine · CLI | ✅ done |
 | **2** | Noise filtering · rule-based risk scoring · explanations | ✅ done |
 | **3** | Event Log collection · correlation (who / when / which process) · timeline | ✅ done |
-| 4 | PySide6 GUI · dashboard · change details | planned |
+| **4** | Desktop app (PySide6) · dashboard · change details · timeline · snapshot manager | ✅ done |
 | 5 | HTML/PDF/JSON reports · file hashing · packaging (PyInstaller) | planned |
 
 See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the full design.
@@ -90,6 +90,24 @@ Links are made on the **target** (SID, service, task path) — never on "the las
 
 Every snapshot is written once as JSON and its SHA-256 is recorded in `index.json`. Every load re-hashes the file and refuses to use it if it has changed, and `winvault verify` checks the whole store. Volatile fields such as timestamps are kept as evidence but never count as a "modification".
 
+## Desktop app (Phase 4)
+
+```powershell
+pip install -e ".[gui]"
+winvault gui          # or: winvault-gui
+```
+
+The app runs the same pipeline as the CLI, so both always show the same results:
+
+- **Dashboard tiles**: Critical / High / Medium / Low / filtered noise
+- **Findings table**, sorted by severity, with a filter box and a *Show filtered noise* toggle
+- **Details pane** for the selected finding: why it matters (score breakdown), what changed (before/after), attribution (when, who, which process, command line, confidence) and the evidence events
+- **Timeline** tab with process starts, audit events and changes in order
+- **Snapshots** tab: every stored snapshot, a one-click integrity check, and a comparison of any two (works offline, even on Linux)
+- Alerts (e.g. *audit log cleared*) and coverage warnings in a banner. Slow work runs in the background, so the window never freezes.
+
+Run it as Administrator. It tells you when it isn't elevated.
+
 ## Quick start
 
 Run these on Windows from an **elevated** terminal:
@@ -98,7 +116,7 @@ Run these on Windows from an **elevated** terminal:
 git clone https://github.com/M7MD-2030/WinVault.git
 cd WinVault
 py -m venv .venv; .\.venv\Scripts\Activate.ps1
-pip install -e ".[dev]"
+pip install -e ".[dev,gui]"
 
 winvault baseline --label "clean install"
 # ... use the machine, install something, etc ...

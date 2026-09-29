@@ -8,47 +8,17 @@ import sys
 from pathlib import Path
 
 from . import PROJECT_NAME, __version__
-from .analysis import analyze
 from .analysis.pipeline import sort_key
 from .collectors import ALL_COLLECTORS
 from .collectors.base import is_admin, is_windows
-from .compare import compare_snapshots
-from .correlation import correlate
-from .events.reader import parse_time
 from .models import ChangeStatus, ComparisonResult
+from .presentation import describe_field, display_name, grouped_evidence, local_time  # noqa: F401 (re-exported)
+from .presentation import short as _short
+from .service import investigate
 from .snapshot import IntegrityError, SnapshotStore, load_snapshot_file, take_snapshot
 
 SYMBOL = {ChangeStatus.ADDED: "+", ChangeStatus.REMOVED: "-", ChangeStatus.MODIFIED: "~"}
 LEVEL_TAG = {"critical": "CRIT", "high": "HIGH", "medium": "MED ", "low": "low ", "noise": "noise"}
-
-
-def _short(value, width: int = 90) -> str:
-    text = json.dumps(value, ensure_ascii=False) if not isinstance(value, str) else value
-    return text if len(text) <= width else text[: width - 3] + "..."
-
-
-def display_name(change) -> str:
-    """Human-friendly label: users/groups show their name, not just the SID."""
-    item = change.after or change.before or {}
-    if change.category == "users" and item.get("name"):
-        return f"{item.get('kind', 'user')} {item['name']}  ({item.get('sid', change.key)})"
-    return change.key
-
-
-def describe_field(f) -> list[str]:
-    """For list fields (e.g. group members) show only what was added/removed."""
-    if isinstance(f.before, list) and isinstance(f.after, list):
-        added = [x for x in f.after if x not in f.before]
-        removed = [x for x in f.before if x not in f.after]
-        lines = [f"{f.name}: + {x}" for x in added] + [f"{f.name}: - {x}" for x in removed]
-        return lines or [f"{f.name}: order changed"]
-    return [f"{f.name}: {_short(f.before)}  ->  {_short(f.after)}"]
-
-
-def local_time(iso: str | None) -> str:
-    """Render an ISO timestamp in this machine's local time, e.g. 2026-09-30 05:42:08."""
-    t = parse_time(iso)
-    return t.astimezone().strftime("%Y-%m-%d %H:%M:%S") if t else "unknown time"
 
 
 def print_attribution(change) -> None:
@@ -65,8 +35,9 @@ def print_attribution(change) -> None:
         print(f"        cmd:  {_short(proc['command_line'], 110)}")
     if a["confidence"] in ("low", "none", "medium"):
         print(f"        note: {a['note']}")
-    for ev in change.evidence[:4]:
-        print(f"        evidence: [{ev['event_id']}] {_short(ev['summary'], 100)}")
+    for ev, n in grouped_evidence(change.evidence)[:5]:
+        times = f" (x{n})" if n > 1 else ""
+        print(f"        evidence: [{ev['event_id']}] {_short(ev['summary'], 100)}{times}")
 
 
 def print_timeline(result: ComparisonResult) -> None:
@@ -75,7 +46,7 @@ def print_timeline(result: ComparisonResult) -> None:
     print("\nTimeline (local time)")
     print("-" * 48)
     for e in result.timeline:
-        stamp = local_time(e["time"]) if e.get("time") else "(undated)          "
+        stamp = local_time(e["time"], ms=True) if e.get("time") else "(undated)              "
         marker = {"process": "PROC ", "event": "EVENT", "change": ">>>  ", "alert": "ALERT"}[e["kind"]]
         print(f"{stamp}  {marker} {_short(e['text'], 110)}")
 
@@ -175,7 +146,7 @@ def cmd_compare(args) -> int:
     current = _capture(args, "snapshot", events_since=since)
     if current is None:
         return 1
-    return _report(compare_snapshots(baseline, current), args, baseline, current)
+    return _report(baseline, current, args)
 
 
 def cmd_diff(args) -> int:
@@ -189,13 +160,13 @@ def cmd_diff(args) -> int:
     except (KeyError, IntegrityError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
-    return _report(compare_snapshots(a, b), args, a, b)
+    return _report(a, b, args)
 
 
-def _report(result: ComparisonResult, args, baseline: dict, current: dict) -> int:
-    stats = analyze(result)
-    correlate(result, current, baseline)
-    print_result(result, stats, args.show, show_noise=args.show_noise, timeline=args.timeline)
+def _report(baseline: dict, current: dict, args) -> int:
+    inv = investigate(baseline, current)
+    result = inv.result
+    print_result(result, inv.stats, args.show, show_noise=args.show_noise, timeline=args.timeline)
     if args.json:
         Path(args.json).write_text(json.dumps(result.to_dict(), indent=2, ensure_ascii=False), encoding="utf-8")
         print(f"\nJSON report written to {args.json}")
@@ -266,7 +237,17 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("list", help="list stored snapshots").set_defaults(func=cmd_list)
     sub.add_parser("verify", help="re-hash every stored snapshot").set_defaults(func=cmd_verify)
+    sub.add_parser("gui", help="open the desktop app (needs: pip install winvault[gui])").set_defaults(func=cmd_gui)
     return p
+
+
+def cmd_gui(args) -> int:
+    try:
+        from .gui import main as gui_main
+    except ImportError as exc:
+        print(f"error: the GUI needs PySide6 — run: pip install -e \".[gui]\"  ({exc})", file=sys.stderr)
+        return 1
+    return gui_main(store=args.store)
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "winvault"
-version = "0.5.0"
+version = "1.0.0"
 description = "WinVault — Digital Evidence & Forensic Analysis: security-focused change analysis for Windows"
 readme = "README.md"
 license = { text = "MIT" }
@@ -12,12 +12,21 @@ requires-python = ">=3.10"
 authors = [{ name = "M7MD-2030" }]
 keywords = ["dfir", "digital-forensics", "windows", "incident-response", "blue-team", "persistence"]
 classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Environment :: Win32 (MS Windows)",
+  "Intended Audience :: Information Technology",
+  "Intended Audience :: System Administrators",
   "Programming Language :: Python :: 3",
   "Operating System :: Microsoft :: Windows",
   "Topic :: Security",
   "License :: OSI Approved :: MIT License",
 ]
 dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/M7MD-2030/WinVault"
+Issues = "https://github.com/M7MD-2030/WinVault/issues"
+Changelog = "https://github.com/M7MD-2030/WinVault/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
@@ -31,6 +40,9 @@ winvault-gui = "winvault.gui:run"
 
 [tool.setuptools.packages.find]
 include = ["winvault*"]
+
+[tool.setuptools.package-data]
+"winvault.gui" = ["assets/*.png"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

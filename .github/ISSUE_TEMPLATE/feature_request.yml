@@ -1,0 +1,15 @@
+name: Feature or detection idea
+description: Suggest a feature, a collector, a scoring rule or a noise rule
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What should WinVault do?
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why is it useful?
+      description: For detection or noise rules, describe a real benign case and a case that must still be caught.

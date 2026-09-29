@@ -155,3 +155,12 @@ def test_token_must_match_whole_word():
                        "data": {"CommandLine": "sc.exe create WinVaultTestSvc"}}])
     assert _find_process(idx, ["WinVaultTest"], None, None) is None
     assert _find_process(idx, ["WinVaultTestSvc"], None, None) is not None
+
+
+def test_log_retention_gap_is_reported():
+    block = {"window_start": "2026-09-30T02:42:00.000Z", "window_end": "2026-09-30T02:43:00.000Z",
+             "status": "ok", "errors": {}, "task_log_enabled": True, "events": EVENTS,
+             "oldest": {"Security": "2026-09-30T02:42:30.0000000Z", "System": "2026-09-01T00:00:00.0000000Z"}}
+    result, _ = run(*snaps(extra_events_block=block))
+    gaps = [w for w in result.warnings if "only reaches back" in w]
+    assert len(gaps) == 1 and "Security" in gaps[0]

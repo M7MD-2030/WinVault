@@ -74,11 +74,15 @@ class MainWindow(QMainWindow):
         self.store = store or SnapshotStore()
         self.inv: Investigation | None = None
         self.worker: Worker | None = None
+        self.audit_hint: str | None = None
+        self._last_extra: list[tuple[str, str]] = []
         self.setWindowTitle(f"{PROJECT_NAME}  ·  v{__version__}")
         self.resize(1360, 820)
         self._build()
+        self._build_menu()
         self._refresh_snapshots()
         self._update_banner()
+        self._check_auditing()
 
     # ------------------------------------------------------------------ layout
     def _build(self) -> None:
@@ -140,6 +144,29 @@ class MainWindow(QMainWindow):
         root.addWidget(self.progress)
         self.setCentralWidget(central)
         self.statusBar().showMessage(f"Store: {self.store.root}")
+
+    def _build_menu(self) -> None:
+        mb = self.menuBar()
+        file_menu = mb.addMenu("&File")
+        file_menu.addAction(self.act_store)
+        file_menu.addSeparator()
+        file_menu.addAction(self.act_report)
+        file_menu.addAction(self.act_export)
+        file_menu.addSeparator()
+        file_menu.addAction(QAction("E&xit", self, triggered=self.close))
+
+        tools = mb.addMenu("&Tools")
+        self.act_audit = QAction("Enable Auditing…", self, triggered=self.on_enable_auditing)
+        self.act_audit.setEnabled(is_windows())
+        tools.addAction(self.act_baseline)
+        tools.addAction(self.act_compare)
+        tools.addAction(self.act_diff)
+        tools.addSeparator()
+        tools.addAction(self.act_audit)
+        tools.addAction(QAction("Verify Snapshot Integrity", self, triggered=self._refresh_snapshots_verified))
+
+        help_menu = mb.addMenu("&Help")
+        help_menu.addAction(QAction("About WinVault", self, triggered=self.on_about))
 
     def _table(self, headers) -> QTableWidget:
         t = QTableWidget(0, len(headers))
@@ -225,7 +252,11 @@ class MainWindow(QMainWindow):
         if not is_windows():
             msgs.append(("info", "Live capture is available on Windows only. You can still open and "
                                  "compare stored snapshots here."))
-        msgs += extra or []
+        if self.audit_hint:
+            msgs.append(("info", self.audit_hint))
+        if extra is not None:
+            self._last_extra = extra
+        msgs += self._last_extra
         if not msgs:
             self.banner.hide()
             return
@@ -326,6 +357,51 @@ class MainWindow(QMainWindow):
         Path(path).write_text(render_html(self.inv, hashes), encoding="utf-8")
         self.statusBar().showMessage(f"Report written to {path} — open it and Print → Save as PDF for a PDF")
         QDesktopServices.openUrl(QUrl.fromLocalFile(path))
+
+    def _check_auditing(self) -> None:
+        """Quietly check audit settings in the background; show a hint if some are off."""
+        if not (is_windows() and is_admin()):
+            return
+        from ..auditing import is_fully_enabled, status
+        self._audit_worker = Worker(lambda progress: status(), self)
+        self._audit_worker.done.connect(lambda items: self._set_audit_hint(not is_fully_enabled(items)))
+        self._audit_worker.start()
+
+    def _set_audit_hint(self, off: bool) -> None:
+        self.audit_hint = ("Some evidence auditing is off, so WinVault can't always tell who or which process "
+                           "made a change. Tools → Enable Auditing turns it on (one time).") if off else None
+        self._update_banner()
+
+    def on_enable_auditing(self) -> None:
+        if not is_admin():
+            QMessageBox.warning(self, "WinVault", "Restart WinVault as Administrator to change audit settings.")
+            return
+        ok = QMessageBox.question(
+            self, "Enable Auditing",
+            "Turn on the Windows audit settings WinVault uses as evidence?\n\n"
+            "• Process creation with command lines (4688)\n"
+            "• Account and group changes (4720–4738, 4732/4733)\n"
+            "• Scheduled task and service installs (4698/4702, 4697)\n"
+            "• Task Scheduler operational log, Security log size 256 MB\n\n"
+            "These are standard Windows settings and stay on after reboot. "
+            "Changes made before enabling can't be attributed retroactively.")
+        if ok != QMessageBox.Yes:
+            return
+        from ..auditing import enable, is_fully_enabled
+        self._run(lambda progress: enable(),
+                  lambda items: (self._set_audit_hint(not is_fully_enabled(items)),
+                                 self.statusBar().showMessage("Auditing enabled" if is_fully_enabled(items)
+                                                              else "Some settings could not be confirmed")),
+                  "Enabling auditing…")
+
+    def on_about(self) -> None:
+        QMessageBox.about(
+            self, "About WinVault",
+            f"<h3>{PROJECT_NAME}</h3><p>Version {__version__}</p>"
+            "<p>Security-focused change analysis for Windows: capture a baseline, capture again, and see "
+            "what changed, whether it matters, who did it, and the evidence.</p>"
+            f"<p>Snapshot store: <code>{self.store.root}</code></p>"
+            "<p>MIT License · <a href='https://github.com/M7MD-2030/WinVault'>github.com/M7MD-2030/WinVault</a></p>")
 
     def on_choose_store(self) -> None:
         path = QFileDialog.getExistingDirectory(self, "Choose snapshot store", str(self.store.root))

@@ -1,4 +1,4 @@
-"""PyInstaller entry point for WinVault.exe (desktop app)."""
+"""PyInstaller entry point for WinVault-GUI.exe (desktop app)."""
 
 from winvault.gui import run
 

@@ -16,6 +16,14 @@ ACCENT = "#3e8ed0"
 
 STYLESHEET = f"""
 QMainWindow, QWidget {{ background: {BG}; color: {TEXT}; font-size: 10pt; }}
+QMenuBar {{ background: {PANEL}; border-bottom: 1px solid {BORDER}; padding: 2px 4px; }}
+QMenuBar::item {{ padding: 4px 10px; border-radius: 4px; background: transparent; }}
+QMenuBar::item:selected {{ background: {BORDER}; }}
+QMenu {{ background: {PANEL}; border: 1px solid {BORDER}; padding: 4px; }}
+QMenu::item {{ padding: 6px 24px 6px 12px; border-radius: 4px; }}
+QMenu::item:selected {{ background: #2b3a4d; }}
+QMenu::item:disabled {{ color: {MUTED}; }}
+QMenu::separator {{ height: 1px; background: {BORDER}; margin: 4px 8px; }}
 QToolBar {{ background: {PANEL}; border-bottom: 1px solid {BORDER}; spacing: 6px; padding: 6px; }}
 QToolButton {{ padding: 6px 12px; border-radius: 6px; }}
 QToolButton:hover {{ background: {BORDER}; }}

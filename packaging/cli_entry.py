@@ -1,4 +1,4 @@
-"""PyInstaller entry point for winvault-cli.exe (command line)."""
+"""PyInstaller entry point for winvault.exe (command line)."""
 
 import sys
 

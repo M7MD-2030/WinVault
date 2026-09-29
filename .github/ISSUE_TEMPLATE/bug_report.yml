@@ -1,0 +1,38 @@
+name: Bug report
+description: Something doesn't work as expected
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: WinVault version
+      placeholder: "1.0.0 (Help → About, or winvault --version)"
+    validations:
+      required: true
+  - type: dropdown
+    id: how
+    attributes:
+      label: How do you run it?
+      options: [winvault.exe (command line), WinVault-GUI.exe (desktop app), From source (pip)]
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      placeholder: "Windows 11 25H2 (winver)"
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Output / warnings
+      description: Paste the relevant output. Remove account names or paths you don't want to share.
+      render: text

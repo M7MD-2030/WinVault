@@ -1,8 +1,11 @@
 name: Release binaries
 
 # Runs when a GitHub release is published (e.g. `gh release create v1.0.0 ...`).
-# Builds WinVault.exe (desktop app) and winvault-cli.exe on Windows, smoke-tests
-# them, and attaches both plus SHA256SUMS.txt to that release.
+# Builds:
+#   winvault.exe      command-line tool — runs inside your terminal like any CLI
+#                     (no UAC popup; open an Administrator terminal for full results)
+#   WinVault-GUI.exe  desktop app — asks for Administrator rights when opened
+# smoke-tests the CLI, and attaches both plus SHA256SUMS.txt to the release.
 on:
   release:
     types: [published]
@@ -23,22 +26,42 @@ jobs:
       - name: Install
         run: pip install ".[gui]" "pyinstaller>=6.6"
 
-      - name: Build WinVault.exe (desktop app)
-        run: >
-          pyinstaller packaging/gui_entry.py --name WinVault --onefile --windowed
-          --uac-admin --noconfirm --clean
+      - name: Write version resource (shown in the .exe's Properties → Details)
+        run: python packaging/make_version_info.py
 
-      - name: Build winvault-cli.exe (command line)
+      - name: Build winvault.exe (command line)
         run: >
-          pyinstaller packaging/cli_entry.py --name winvault-cli --onefile --console
-          --uac-admin --noconfirm --exclude-module PySide6 --exclude-module shiboken6
+          pyinstaller packaging/cli_entry.py --name winvault --onefile --console
+          --noconfirm --clean --exclude-module PySide6 --exclude-module shiboken6
+          --icon packaging/winvault.ico --version-file packaging/version_info.txt
 
-      - name: Smoke-test the CLI binary
+      - name: Build WinVault-GUI.exe (desktop app)
+        run: >
+          pyinstaller packaging/gui_entry.py --name WinVault-GUI --onefile --windowed
+          --uac-admin --noconfirm --icon packaging/winvault.ico
+          --add-data "winvault/gui/assets;winvault/gui/assets"
+          --version-file packaging/version_info.txt
+
+      - name: Smoke-test winvault.exe
         run: |
-          .\dist\winvault-cli.exe --version
-          .\dist\winvault-cli.exe --store "$env:RUNNER_TEMP\wv" baseline --label release-check
-          .\dist\winvault-cli.exe --store "$env:RUNNER_TEMP\wv" compare --no-events --html "$env:RUNNER_TEMP\r.html"
+          $ErrorActionPreference = 'Stop'
+          .\dist\winvault.exe --version
+          .\dist\winvault.exe --store "$env:RUNNER_TEMP\wv" baseline --label release-check
+          .\dist\winvault.exe --store "$env:RUNNER_TEMP\wv" compare --no-events --html "$env:RUNNER_TEMP\r.html"
+          if ($LASTEXITCODE -ne 0) { throw "compare exited $LASTEXITCODE" }
           if (-not (Test-Path "$env:RUNNER_TEMP\r.html")) { throw "report not written" }
+          .\dist\winvault.exe --store "$env:RUNNER_TEMP\wv" list
+
+      - name: Smoke-test install (winvault usable from a new shell by name)
+        run: |
+          $ErrorActionPreference = 'Stop'
+          .\dist\winvault.exe install --dir "$env:RUNNER_TEMP\wvbin"
+          $machine = [Environment]::GetEnvironmentVariable('Path', 'Machine')
+          $user = [Environment]::GetEnvironmentVariable('Path', 'User')
+          $env:Path = "$machine;$user"
+          $found = (Get-Command winvault -ErrorAction Stop).Source
+          "winvault resolved to $found"
+          winvault --version
 
       - name: Checksums
         shell: pwsh
@@ -52,13 +75,13 @@ jobs:
         if: github.event_name == 'release'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ github.event.release.tag_name }}" dist\WinVault.exe dist\winvault-cli.exe dist\SHA256SUMS.txt --clobber
+        run: gh release upload "${{ github.event.release.tag_name }}" dist\winvault.exe dist\WinVault-GUI.exe dist\SHA256SUMS.txt --clobber
 
       - name: Keep as workflow artifact
         uses: actions/upload-artifact@v4
         with:
           name: winvault-windows
           path: |
-            dist/WinVault.exe
-            dist/winvault-cli.exe
+            dist/winvault.exe
+            dist/WinVault-GUI.exe
             dist/SHA256SUMS.txt

@@ -57,7 +57,15 @@ foreach ($s in $specs) {
 }
 $taskLog = $null
 try { $taskLog = (Get-WinEvent -ListLog '__TASKLOG__' -ErrorAction Stop).IsEnabled } catch {}
-[pscustomobject]@{ events = $events.ToArray(); errors = $errors; task_log_enabled = $taskLog } |
+# Oldest surviving event per log: tells us whether the log still reaches back to the baseline.
+$oldest = @{}
+foreach ($log in @('Security', 'System')) {
+  try {
+    $o = Get-WinEvent -LogName $log -MaxEvents 1 -Oldest -ErrorAction Stop
+    $oldest[$log] = $o.TimeCreated.ToUniversalTime().ToString('o')
+  } catch {}
+}
+[pscustomobject]@{ events = $events.ToArray(); errors = $errors; task_log_enabled = $taskLog; oldest = $oldest } |
   ConvertTo-Json -Depth 4 -Compress
 """
 
@@ -150,6 +158,7 @@ def collect_events(since: str, until: datetime | None = None) -> dict:
     block["events"] = events
     block["errors"] = out.get("errors") or {}
     block["task_log_enabled"] = out.get("task_log_enabled")
+    block["oldest"] = out.get("oldest") or {}
     return block
 
 

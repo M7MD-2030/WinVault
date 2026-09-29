@@ -98,11 +98,69 @@ def take_snapshot(kind: str = "snapshot", label: str | None = None,
     return snapshot
 
 
+class StoreLock:
+    """Cross-process lock around index updates (two WinVault runs at once must not
+    lose each other's entries). Uses an exclusive-create lock file; a lock older
+    than ``stale_after`` seconds is assumed abandoned (crashed process)."""
+
+    def __init__(self, path: Path, timeout: float = 15.0, stale_after: float = 120.0):
+        self.path, self.timeout, self.stale_after = path, timeout, stale_after
+
+    def __enter__(self):
+        import time
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        deadline = time.monotonic() + self.timeout
+        while True:
+            try:
+                fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                os.write(fd, str(os.getpid()).encode())
+                os.close(fd)
+                return self
+            except FileExistsError:
+                try:
+                    if time.time() - self.path.stat().st_mtime > self.stale_after:
+                        self.path.unlink(missing_ok=True)
+                        continue
+                except OSError:
+                    pass
+                if time.monotonic() > deadline:
+                    raise TimeoutError(f"snapshot store is locked by another WinVault run ({self.path})")
+                time.sleep(0.1)
+
+    def __exit__(self, *exc):
+        try:
+            self.path.unlink()
+        except OSError:
+            pass
+
+
+def restrict_to_admins(path: Path) -> bool:
+    """Windows: make the store readable/writable only by Administrators and SYSTEM.
+    Snapshots contain account names and paths; tampering is also detected by the
+    SHA-256 check, but not letting ordinary users touch evidence is better still."""
+    if os.name != "nt":
+        return False
+    import subprocess
+    try:
+        proc = subprocess.run(["icacls", str(path), "/inheritance:r",
+                               "/grant:r", "*S-1-5-32-544:(OI)(CI)F", "/grant:r", "*S-1-5-18:(OI)(CI)F"],
+                              capture_output=True, timeout=30, check=False)
+        return proc.returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
 class SnapshotStore:
     def __init__(self, root: str | Path | None = None):
         self.root = Path(root) if root else default_store()
         self.snap_dir = self.root / "snapshots"
         self.index_path = self.root / "index.json"
+
+    def _ensure_root(self) -> None:
+        if not self.root.exists():
+            self.root.mkdir(parents=True, exist_ok=True)
+            if is_admin():
+                restrict_to_admins(self.root)
 
     # ---------- index ----------
     def _read_index(self) -> dict:
@@ -116,27 +174,32 @@ class SnapshotStore:
     @staticmethod
     def _atomic_write(path: Path, data: bytes) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(path.suffix + ".tmp")
-        tmp.write_bytes(data)
+        tmp = path.with_suffix(path.suffix + f".{os.getpid()}.tmp")
+        with open(tmp, "wb") as fh:
+            fh.write(data)
+            fh.flush()
+            os.fsync(fh.fileno())      # evidence must survive a power cut
         os.replace(tmp, path)
 
     # ---------- public API ----------
     def save(self, snapshot: dict) -> Path:
+        self._ensure_root()
         data = json.dumps(snapshot, indent=1, sort_keys=True, ensure_ascii=False).encode("utf-8")
         path = self.snap_dir / f"{snapshot['id']}.json"
         if path.exists():
             raise FileExistsError(f"snapshot {snapshot['id']} already exists")
         self._atomic_write(path, data)
-        index = self._read_index()
-        index["snapshots"][snapshot["id"]] = {
-            "file": path.name,
-            "sha256": hashlib.sha256(data).hexdigest(),
-            "kind": snapshot["kind"],
-            "label": snapshot.get("label"),
-            "created_utc": snapshot["created_utc"],
-            "hostname": snapshot["host"]["hostname"],
-        }
-        self._write_index(index)
+        with StoreLock(self.root / ".lock"):
+            index = self._read_index()
+            index["snapshots"][snapshot["id"]] = {
+                "file": path.name,
+                "sha256": hashlib.sha256(data).hexdigest(),
+                "kind": snapshot["kind"],
+                "label": snapshot.get("label"),
+                "created_utc": snapshot["created_utc"],
+                "hostname": snapshot["host"]["hostname"],
+            }
+            self._write_index(index)
         return path
 
     def list(self) -> list[dict]:

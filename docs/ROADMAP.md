@@ -57,7 +57,22 @@
 - [x] `winvault/report.py`: self-contained HTML report (no external assets, all values HTML-escaped),
       print CSS for PDF via the browser; `--html` in the CLI, *Export Report…* in the app
 - [x] `files` collector: SHA-256 of critical config files (`drivers\etc\hosts` etc.) + scoring rule
-- [x] `.github/workflows/release.yml`: on each published release, PyInstaller builds `WinVault.exe`
-      (windowed) and `winvault-cli.exe` (console, Qt excluded), both with a UAC manifest,
+- [x] `.github/workflows/release.yml`: on each published release, PyInstaller builds `winvault.exe`
+      (console, Qt excluded, runs in your terminal) and `WinVault-GUI.exe` (windowed, UAC manifest),
       smoke-tests the CLI binary, and attaches them with `SHA256SUMS.txt`
 - [ ] Later: code-signing the binaries, hashing more OS files, Sysmon / PowerShell 4104 evidence
+
+## v1.0 — Ready for everyday use ✅
+- [x] CLI-first: `winvault.exe` works from any terminal like `ls` — `winvault install` puts it on PATH,
+      colours, `status`, `--fail-on` exit codes for scripts, help with examples
+- [x] `winvault audit [--enable]` / *Tools → Enable Auditing* (no script needed with the .exe)
+- [x] Snapshot store restricted to Administrators + SYSTEM; cross-process index lock; fsync'd writes
+- [x] Warning when the event logs no longer reach back to the baseline
+- [x] App icon, menu bar, About; version resource on the .exe files
+- [x] End-user README, DEVELOPMENT / CONTRIBUTING / SECURITY / CHANGELOG, issue & PR templates
+
+## Ideas for later
+- Code-signed releases (removes the SmartScreen prompt)
+- Scheduled baselines/compares (Windows Task Scheduler integration) with report on change
+- More evidence: PowerShell 4104 script blocks, Sysmon (1/12/13), SACL-based registry 4657
+- More areas: firewall rules, Defender exclusions and settings, installed software, WMI subscriptions

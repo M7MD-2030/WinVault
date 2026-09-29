@@ -301,6 +301,14 @@ def _coverage_warnings(result: ComparisonResult, idx: EventIndex, block: dict) -
     elif not any(e["data"].get("CommandLine") for e in procs):
         result.warnings.append("process events have no command lines — enable command-line logging "
                                "with scripts\\Enable-WinVaultAuditing.ps1")
+    window_start = parse_time(block.get("window_start"))
+    for log, oldest in (block.get("oldest") or {}).items():
+        t = parse_time(oldest)
+        if t and window_start and t > window_start + CLOCK_SLACK:
+            result.warnings.append(
+                f"the {log} log only reaches back to {oldest[:19].replace('T', ' ')} UTC — older events since the "
+                f"baseline were overwritten, so some changes can't be attributed. Take baselines more often, "
+                f"or enlarge the log (`winvault audit --enable` sets Security to 256 MB)")
     if block.get("task_log_enabled") is False:
         result.warnings.append("Task Scheduler operational log is disabled — task attribution relies on "
                                "Security 4698 only")

@@ -12,3 +12,6 @@ venv/
 winvault-data/
 *.snapshot.json
 report*.json
+packaging/version_info.txt
+winvault-report-*.html
+winvault-*.json

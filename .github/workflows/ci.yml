@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  unit-tests:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]"
+      - run: pytest -q
+
+  # GitHub's Windows runners are elevated, so this exercises every live
+  # collector end-to-end: baseline -> harmless test changes -> compare.
+  windows-smoke:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - name: Baseline
+        run: winvault --store "$env:RUNNER_TEMP\wv" baseline --label ci
+      - name: Make test changes
+        run: .\scripts\Test-WinVaultChanges.ps1
+      - name: Compare
+        run: winvault --store "$env:RUNNER_TEMP\wv" compare --json "$env:RUNNER_TEMP\report.json" --show 30
+      - name: Assert detections
+        shell: python
+        run: |
+          import json, os
+          r = json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "report.json")))
+          keys = {(c["category"], c["status"]): [] for c in r["changes"]}
+          for c in r["changes"]:
+              keys[(c["category"], c["status"])].append(c["key"])
+          def hit(cat, status, needle):
+              assert any(needle.lower() in k.lower() for k in keys.get((cat, status), [])), (cat, status, needle)
+          hit("registry", "added", "WinVaultTest")
+          hit("services", "added", "WinVaultTestSvc")
+          hit("tasks", "added", "WinVaultTest")
+          hit("startup", "added", "WinVaultTest.txt")
+          assert any(c["category"] == "users" and c["status"] == "added" and c["after"]["name"] == "wv_testuser"
+                     and c["after"]["is_admin"] for c in r["changes"])
+          print("all 5 collectors detected their test change")
+      - name: Cleanup
+        if: always()
+        run: .\scripts\Test-WinVaultChanges.ps1 -Cleanup

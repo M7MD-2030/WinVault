@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "winvault"
+version = "0.1.0"
+description = "WinVault — Digital Evidence & Forensic Analysis: security-focused change analysis for Windows"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+authors = [{ name = "M7MD-2030" }]
+keywords = ["dfir", "digital-forensics", "windows", "incident-response", "blue-team", "persistence"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Operating System :: Microsoft :: Windows",
+  "Topic :: Security",
+  "License :: OSI Approved :: MIT License",
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+gui = ["PySide6>=6.6"]
+
+[project.scripts]
+winvault = "winvault.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["winvault*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -7,6 +7,8 @@
 ![Platform](https://img.shields.io/badge/platform-Windows-0078D6)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
+![WinVault detecting test changes](docs/images/compare.png)
+
 Tools like Regshot show *every* difference between two points in time, and a normal Windows machine creates thousands of them in minutes. WinVault collects only **security-relevant** state (persistence locations, services, scheduled tasks, accounts, startup items), compares it, and (in upcoming phases) filters out the noise, scores what's left with explainable rules, and ties each finding back to Windows Event Log evidence.
 
 ```

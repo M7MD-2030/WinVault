@@ -92,6 +92,8 @@ Every snapshot is written once as JSON and its SHA-256 is recorded in `index.jso
 
 ## Desktop app (Phase 4)
 
+![WinVault desktop app](docs/images/gui.png)
+
 ```powershell
 pip install -e ".[gui]"
 winvault gui          # or: winvault-gui

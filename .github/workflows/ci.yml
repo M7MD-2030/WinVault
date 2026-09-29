@@ -51,6 +51,16 @@ jobs:
           assert any(c["category"] == "users" and c["status"] == "added" and c["after"]["name"] == "wv_testuser"
                      and c["after"]["is_admin"] for c in r["changes"])
           print("all 5 collectors detected their test change")
+
+          # Phase 2: the new admin user must score critical, and every test
+          # artifact must be scored as signal, never filtered as noise.
+          admin = next(c for c in r["changes"] if c["category"] == "users"
+                       and c.get("after", {}).get("name") == "wv_testuser")
+          assert admin["analysis"]["level"] == "critical", admin["analysis"]
+          for c in r["changes"]:
+              if "WinVaultTest" in c["key"] or c.get("after", {}).get("name") == "wv_testuser":
+                  assert c["analysis"]["noise"] is None, ("test artifact wrongly filtered", c["key"])
+          print("scoring flags the new admin user critical and keeps all test artifacts as signal")
       - name: Cleanup
         if: always()
         run: .\scripts\Test-WinVaultChanges.ps1 -Cleanup

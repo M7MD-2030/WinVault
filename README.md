@@ -20,7 +20,7 @@ Detect → Filter → Analyze → Correlate → Explain → Report
 | Phase | Scope | Status |
 |---|---|---|
 | **1 — MVP** | Registry, Services, Scheduled Tasks, Users & Groups, Startup collectors · snapshot store · comparison engine · CLI | ✅ done |
-| 2 | Noise filtering · rule-based risk scoring · explanations | ⏳ next |
+| **2** | Noise filtering · rule-based risk scoring · explanations | ✅ done |
 | 3 | Event Log collection · correlation · timeline | planned |
 | 4 | PySide6 GUI · dashboard · change details | planned |
 | 5 | HTML/PDF/JSON reports · file hashing · packaging (PyInstaller) | planned |
@@ -36,6 +36,25 @@ See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the full design.
 | `tasks` | `%SystemRoot%\System32\Tasks` XML | actions, triggers, run-as principal, run level, hidden flag, SHA-256 |
 | `users` | Local users & groups | enabled, groups, admin membership, password metadata |
 | `startup` | All-users + per-profile Startup folders | SHA-256, size, timestamps |
+
+## Analysis (Phase 2)
+
+`winvault compare` no longer just lists differences — it filters known Windows noise and scores what's left:
+
+- **Noise filter** tags expected churn (Defender platform updates, Setup's `defaultuser0`, Microsoft task-hash rewrites, per-user service instances) and hides it by default. Noise is tagged with a reason, never deleted, and `--show-noise` reveals it. Every rule matches tightly — the same binary moving to the *official* directory — so a look-alike path can't hide in it.
+- **Risk scoring** adds explainable points per finding and maps the total to Low / Medium / High / Critical (0–29 / 30–59 / 60–79 / 80+). The reasons list *is* the justification, so you never see a bare "CRITICAL":
+
+```
+9 changes: 3 filtered as noise, 6 to review (critical 1, high 0, medium 4, low 1)
+
+[CRIT]  90p [+] users     user wv_testuser  (S-1-5-21-...-1004)
+        +90 new local user created directly in Administrators
+[MED ]  50p [~] users     group Administrators  (S-1-5-32-544)
+        +50 account added to Administrators group
+        members: + DESKTOP\wv_testuser
+```
+
+Add `--json report.json` for the full detail, including each finding's `analysis` block.
 
 ## Evidence handling
 

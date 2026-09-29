@@ -33,6 +33,19 @@ class Change:
     before: dict | None = None
     after: dict | None = None
     fields: list[FieldChange] = field(default_factory=list)
+    # Filled in by the analysis pipeline (Phase 2)
+    noise: str | None = None          # reason this is expected Windows activity
+    score: int = 0
+    level: str = "low"
+    reasons: list[str] = field(default_factory=list)
+
+    @property
+    def item(self) -> dict:
+        """The most relevant view of the object (after for added/modified, before for removed)."""
+        return self.after if self.after is not None else (self.before or {})
+
+    def field_names(self) -> set[str]:
+        return {f.name for f in self.fields}
 
     def to_dict(self) -> dict:
         return {
@@ -42,6 +55,12 @@ class Change:
             "before": self.before,
             "after": self.after,
             "fields": [f.to_dict() for f in self.fields],
+            "analysis": {
+                "noise": self.noise,
+                "score": self.score,
+                "level": self.level,
+                "reasons": self.reasons,
+            },
         }
 
 

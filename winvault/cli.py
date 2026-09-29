@@ -9,6 +9,8 @@ import sys
 from pathlib import Path
 
 from . import PROJECT_NAME, __version__
+from .analysis import analyze
+from .analysis.pipeline import sort_key
 from .collectors import ALL_COLLECTORS
 from .collectors.base import is_admin, is_windows
 from .compare import compare_snapshots
@@ -16,6 +18,7 @@ from .models import ChangeStatus, ComparisonResult
 from .snapshot import IntegrityError, SnapshotStore, load_snapshot_file, take_snapshot
 
 SYMBOL = {ChangeStatus.ADDED: "+", ChangeStatus.REMOVED: "-", ChangeStatus.MODIFIED: "~"}
+LEVEL_TAG = {"critical": "CRIT", "high": "HIGH", "medium": "MED ", "low": "low ", "noise": "noise"}
 
 
 def _short(value, width: int = 90) -> str:
@@ -41,27 +44,43 @@ def describe_field(f) -> list[str]:
     return [f"{f.name}: {_short(f.before)}  ->  {_short(f.after)}"]
 
 
-def print_result(result: ComparisonResult, show: int) -> None:
+def print_result(result: ComparisonResult, show: int, show_noise: bool = False) -> None:
+    stats = analyze(result)
     print(f"\nBaseline: {result.baseline_id}\nCurrent:  {result.current_id}\n")
     print(f"{'category':<10} {'added':>7} {'removed':>8} {'modified':>9} {'unchanged':>10}")
     print("-" * 48)
     for cat, s in result.summary.items():
         print(f"{cat:<10} {s.added:>7} {s.removed:>8} {s.modified:>9} {s.unchanged:>10}")
-    print(f"\nTotal changes: {result.total_changes}")
     for w in result.warnings:
         print(f"WARNING: {w}")
 
+    lv = stats.by_level
+    print(f"\n{stats.total} changes: {stats.noise} filtered as noise, {stats.signal} to review "
+          f"(critical {lv['critical']}, high {lv['high']}, medium {lv['medium']}, low {lv['low']})")
+
     if not result.changes or show == 0:
         return
+
+    shown = [c for c in result.changes if show_noise or not c.noise]
+    shown.sort(key=sort_key)
     print()
-    for change in result.changes[:show]:
-        print(f"[{SYMBOL[change.status]}] {change.category:<9} {display_name(change)}")
+    for change in shown[:show]:
+        tag = LEVEL_TAG.get(change.level, change.level)
+        score = "     " if change.noise else f"{change.score:>3}p"
+        print(f"[{tag}] {score} [{SYMBOL[change.status]}] {change.category:<9} {display_name(change)}")
+        if change.noise:
+            print(f"        noise: {change.noise}")
+        for r in change.reasons:
+            print(f"        {r}")
         if change.status is ChangeStatus.MODIFIED:
             for f in change.fields:
                 for line in describe_field(f):
-                    print(f"      {line}")
-    if len(result.changes) > show:
-        print(f"\n... {len(result.changes) - show} more (use --show N or --json FILE)")
+                    print(f"        {line}")
+    hidden = len(shown) - min(len(shown), show)
+    if hidden > 0:
+        print(f"\n... {hidden} more (use --show N or --json FILE)")
+    if stats.noise and not show_noise:
+        print(f"({stats.noise} noise change(s) hidden — use --show-noise to see them)")
 
 
 def _progress(msg: str) -> None:
@@ -128,7 +147,7 @@ def cmd_diff(args) -> int:
 
 
 def _report(result: ComparisonResult, args) -> int:
-    print_result(result, args.show)
+    print_result(result, args.show, show_noise=getattr(args, "show_noise", False))
     if args.json:
         Path(args.json).write_text(json.dumps(result.to_dict(), indent=2, ensure_ascii=False), encoding="utf-8")
         print(f"\nJSON report written to {args.json}")
@@ -172,6 +191,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     def report_opts(sp):
         sp.add_argument("--show", type=int, default=50, help="max changes to print (default 50)")
+        sp.add_argument("--show-noise", action="store_true", help="also show changes filtered as noise")
         sp.add_argument("--json", metavar="FILE", help="write the full comparison as JSON")
 
     sp = sub.add_parser("baseline", help="capture a new baseline")

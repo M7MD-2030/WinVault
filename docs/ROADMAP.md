@@ -10,19 +10,24 @@
 - [x] Comparison engine (added / removed / modified / unchanged)
 - [x] CLI + CI end-to-end detection test
 
-## Phase 2 — Noise filtering & risk scoring
-- [ ] `winvault/filters/` — allow-list rules (YAML) for expected churn:
-      per-session user services (`*_<hex>` suffix e.g. `CDPUserSvc_1a2b3`),
-      Microsoft-signed tasks under `\Microsoft\Windows\`, Defender/Update churn
-- [ ] `winvault/rules/` — one rule = match condition + points + reason, loaded from YAML
-      so rules can be added without touching the engine
-- [ ] Starter rules (20–30), e.g.
-      new Run/RunOnce value (+30) · new service (+30) · new task (+30) · runs as SYSTEM (+20)
-      · action is powershell/cmd/wscript/mshta/rundll32 (+20) · binary in user-writable path
-      (`\Users\`, `\AppData\`, `\Temp\`, `\ProgramData\`) (+20) · hidden task (+15)
-      · new local user (+40) · added to Administrators (+50) · Winlogon Shell/Userinit changed (+60)
-- [ ] Levels: 0–29 Low · 30–59 Medium · 60–79 High · 80+ Critical, with every contributing reason listed
-- [ ] Extra collectors: firewall, Defender prefs/exclusions, hosts file, installed software
+## Phase 2 — Noise filtering & risk scoring ✅
+- [x] `winvault/analysis/noise.py` — tight, auditable noise rules. Noise is tagged
+      with a reason and hidden by default (`--show-noise` reveals it), never dropped.
+      Rules: Defender platform move (same binary, ProgramFiles → versioned Platform dir),
+      Setup transient accounts (`defaultuser0`), Microsoft `\Microsoft\Windows\` tasks
+      whose only change is the file hash, per-user service instances (`Name_<hex>` on svchost).
+      Every rule is deliberately narrow so a look-alike path can't hide in it.
+- [x] `winvault/analysis/rules.py` — points + reason per rule; the reasons list *is*
+      the justification, so no bare "CRITICAL" without an explanation.
+      new autorun value +30 · new service +30 · new task +30 · new startup item +25
+      · runs as SYSTEM +20 · uses interpreter (powershell/cmd/mshta/rundll32/…) +20
+      · binary in user-writable path +20 · hidden task +15 · Winlogon Shell/Userinit +60
+      · new local user +40 (direct into Administrators +90) · added to Administrators +50
+      · security service disabled +60
+- [x] Levels: 0–29 Low · 30–59 Medium · 60–79 High · 80+ Critical
+- [x] `winvault compare` sorts by score, shows level + points + reasons, hides noise;
+      full detail (incl. `analysis`) in `--json`. CI asserts the new admin user scores critical.
+- [ ] Extra collectors: firewall, Defender prefs/exclusions, hosts file, installed software (Phase 2.1)
 
 ## Phase 3 — Event Log correlation & timeline
 - [ ] Read Security / System / TaskScheduler / PowerShell / Sysmon logs (pywin32 `win32evtlog` or `wevtutil`)

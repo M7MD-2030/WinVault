@@ -1,5 +1,4 @@
-"""Command-line interface (Phase 1). The PySide6 GUI arrives in Phase 4 and
-will call the same functions."""
+"""Command-line interface. The PySide6 GUI (Phase 4) calls the same functions."""
 
 from __future__ import annotations
 
@@ -14,6 +13,8 @@ from .analysis.pipeline import sort_key
 from .collectors import ALL_COLLECTORS
 from .collectors.base import is_admin, is_windows
 from .compare import compare_snapshots
+from .correlation import correlate
+from .events.reader import parse_time
 from .models import ChangeStatus, ComparisonResult
 from .snapshot import IntegrityError, SnapshotStore, load_snapshot_file, take_snapshot
 
@@ -44,13 +45,50 @@ def describe_field(f) -> list[str]:
     return [f"{f.name}: {_short(f.before)}  ->  {_short(f.after)}"]
 
 
-def print_result(result: ComparisonResult, show: int, show_noise: bool = False) -> None:
-    stats = analyze(result)
+def local_time(iso: str | None) -> str:
+    """Render an ISO timestamp in this machine's local time, e.g. 2026-09-30 05:42:08."""
+    t = parse_time(iso)
+    return t.astimezone().strftime("%Y-%m-%d %H:%M:%S") if t else "unknown time"
+
+
+def print_attribution(change) -> None:
+    a = change.attribution
+    if not a:
+        return
+    proc = a.get("process") or {}
+    who = a.get("user") or "undetermined"
+    what = proc.get("image") or "undetermined"
+    print(f"        when: {local_time(a.get('when')) if a.get('when') else 'undetermined'}"
+          f"{'  (' + a['when_source'] + ')' if a.get('when_source') else ''}")
+    print(f"        who:  {who}   process: {what}   confidence: {a['confidence']}")
+    if proc.get("command_line"):
+        print(f"        cmd:  {_short(proc['command_line'], 110)}")
+    if a["confidence"] in ("low", "none", "medium"):
+        print(f"        note: {a['note']}")
+    for ev in change.evidence[:4]:
+        print(f"        evidence: [{ev['event_id']}] {_short(ev['summary'], 100)}")
+
+
+def print_timeline(result: ComparisonResult) -> None:
+    if not result.timeline:
+        return
+    print("\nTimeline (local time)")
+    print("-" * 48)
+    for e in result.timeline:
+        stamp = local_time(e["time"]) if e.get("time") else "(undated)          "
+        marker = {"process": "PROC ", "event": "EVENT", "change": ">>>  ", "alert": "ALERT"}[e["kind"]]
+        print(f"{stamp}  {marker} {_short(e['text'], 110)}")
+
+
+def print_result(result: ComparisonResult, stats, show: int, show_noise: bool = False,
+                 timeline: bool = False) -> None:
     print(f"\nBaseline: {result.baseline_id}\nCurrent:  {result.current_id}\n")
     print(f"{'category':<10} {'added':>7} {'removed':>8} {'modified':>9} {'unchanged':>10}")
     print("-" * 48)
     for cat, s in result.summary.items():
         print(f"{cat:<10} {s.added:>7} {s.removed:>8} {s.modified:>9} {s.unchanged:>10}")
+    for a in result.alerts:
+        print(f"\n!!! ALERT {local_time(a['time'])}: {a['message']}")
     for w in result.warnings:
         print(f"WARNING: {w}")
 
@@ -76,11 +114,14 @@ def print_result(result: ComparisonResult, show: int, show_noise: bool = False) 
             for f in change.fields:
                 for line in describe_field(f):
                     print(f"        {line}")
+        print_attribution(change)
     hidden = len(shown) - min(len(shown), show)
     if hidden > 0:
         print(f"\n... {hidden} more (use --show N or --json FILE)")
     if stats.noise and not show_noise:
         print(f"({stats.noise} noise change(s) hidden — use --show-noise to see them)")
+    if timeline:
+        print_timeline(result)
 
 
 def _progress(msg: str) -> None:
@@ -98,15 +139,19 @@ def _require_live_host() -> bool:
     return True
 
 
-def _capture(args, kind: str) -> dict | None:
+def _capture(args, kind: str, events_since: str | None = None) -> dict | None:
     if not _require_live_host():
         return None
     store = SnapshotStore(args.store)
-    snap = take_snapshot(kind, args.label, args.only, progress=_progress)
+    snap = take_snapshot(kind, args.label, args.only, progress=_progress, events_since=events_since)
     path = store.save(snap)
     for name, col in snap["collectors"].items():
         status = f"{col['count']} items" if col["status"] == "ok" else f"ERROR: {col['error']}"
         print(f"  {name:<10} {status}")
+    ev = snap.get("events")
+    if ev:
+        status = f"{len(ev['events'])} events" if ev["status"] == "ok" else f"ERROR: {ev['errors']}"
+        print(f"  {'events':<10} {status}")
     print(f"\nSaved {kind} {snap['id']}\n  -> {path}")
     return snap
 
@@ -126,10 +171,11 @@ def cmd_compare(args) -> int:
     except (KeyError, IntegrityError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
-    current = _capture(args, "snapshot")
+    since = None if args.no_events else baseline["created_utc"]
+    current = _capture(args, "snapshot", events_since=since)
     if current is None:
         return 1
-    return _report(compare_snapshots(baseline, current), args)
+    return _report(compare_snapshots(baseline, current), args, baseline, current)
 
 
 def cmd_diff(args) -> int:
@@ -143,11 +189,13 @@ def cmd_diff(args) -> int:
     except (KeyError, IntegrityError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
-    return _report(compare_snapshots(a, b), args)
+    return _report(compare_snapshots(a, b), args, a, b)
 
 
-def _report(result: ComparisonResult, args) -> int:
-    print_result(result, args.show, show_noise=getattr(args, "show_noise", False))
+def _report(result: ComparisonResult, args, baseline: dict, current: dict) -> int:
+    stats = analyze(result)
+    correlate(result, current, baseline)
+    print_result(result, stats, args.show, show_noise=args.show_noise, timeline=args.timeline)
     if args.json:
         Path(args.json).write_text(json.dumps(result.to_dict(), indent=2, ensure_ascii=False), encoding="utf-8")
         print(f"\nJSON report written to {args.json}")
@@ -192,6 +240,7 @@ def build_parser() -> argparse.ArgumentParser:
     def report_opts(sp):
         sp.add_argument("--show", type=int, default=50, help="max changes to print (default 50)")
         sp.add_argument("--show-noise", action="store_true", help="also show changes filtered as noise")
+        sp.add_argument("--timeline", action="store_true", help="print a chronological timeline of the evidence")
         sp.add_argument("--json", metavar="FILE", help="write the full comparison as JSON")
 
     sp = sub.add_parser("baseline", help="capture a new baseline")
@@ -206,6 +255,7 @@ def build_parser() -> argparse.ArgumentParser:
     capture_opts(sp)
     report_opts(sp)
     sp.add_argument("--against", default="latest-baseline", help="snapshot id/prefix (default: latest baseline)")
+    sp.add_argument("--no-events", action="store_true", help="skip Event Log collection and correlation")
     sp.set_defaults(func=cmd_compare)
 
     sp = sub.add_parser("diff", help="compare two stored snapshots or snapshot files (works offline)")

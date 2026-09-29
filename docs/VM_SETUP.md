@@ -98,12 +98,31 @@ wvreset() {
 >
 > Keep your code on GitHub, not only inside the VM. `wvreset` wipes the overlay, including anything you haven't pushed.
 
-## 5. Test loop
+## 5. Enable auditing and save it into the base
+
+Windows doesn't log process creation or scheduled-task creation by default, so WinVault's "who / which process" answers need auditing turned on. In the VM (Terminal as Admin):
+
+```powershell
+cd C:\dev\WinVault
+.\scripts\Enable-WinVaultAuditing.ps1
+Stop-Computer
+```
+
+Then on Arch, merge that change into the frozen base so every `wvreset` keeps it:
+
+```bash
+sudo chmod 644 $DISK/winvault-dev-base.qcow2
+sudo qemu-img commit $DISK/winvault-dev.qcow2
+sudo chmod 444 $DISK/winvault-dev-base.qcow2
+wvreset
+```
+
+## 6. Test loop
 
 ```powershell
 winvault baseline --label clean
 .\scripts\Test-WinVaultChanges.ps1        # harmless labelled changes
-winvault compare --json report.json
+winvault compare --timeline --json report.json
 .\scripts\Test-WinVaultChanges.ps1 -Cleanup
 ```
 

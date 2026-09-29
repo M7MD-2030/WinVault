@@ -28,12 +28,14 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -e .
+      - name: Enable auditing
+        run: .\scripts\Enable-WinVaultAuditing.ps1
       - name: Baseline
         run: winvault --store "$env:RUNNER_TEMP\wv" baseline --label ci
       - name: Make test changes
         run: .\scripts\Test-WinVaultChanges.ps1
       - name: Compare
-        run: winvault --store "$env:RUNNER_TEMP\wv" compare --json "$env:RUNNER_TEMP\report.json" --show 30
+        run: winvault --store "$env:RUNNER_TEMP\wv" compare --json "$env:RUNNER_TEMP\report.json" --show 30 --timeline
       - name: Assert detections
         shell: python
         run: |
@@ -55,12 +57,26 @@ jobs:
           # Phase 2: the new admin user must score critical, and every test
           # artifact must be scored as signal, never filtered as noise.
           admin = next(c for c in r["changes"] if c["category"] == "users"
-                       and c.get("after", {}).get("name") == "wv_testuser")
+                       and (c.get("after") or {}).get("name") == "wv_testuser")
           assert admin["analysis"]["level"] == "critical", admin["analysis"]
           for c in r["changes"]:
-              if "WinVaultTest" in c["key"] or c.get("after", {}).get("name") == "wv_testuser":
+              if "WinVaultTest" in c["key"] or (c.get("after") or {}).get("name") == "wv_testuser":
                   assert c["analysis"]["noise"] is None, ("test artifact wrongly filtered", c["key"])
           print("scoring flags the new admin user critical and keeps all test artifacts as signal")
+
+          # Phase 3: each change is tied to the audit event that names it.
+          def ev_ids(change):
+              return {e["event_id"] for e in change["correlation"]["evidence"]}
+          svc = next(c for c in r["changes"] if c["key"] == "WinVaultTestSvc")
+          assert 7045 in ev_ids(svc), svc["correlation"]
+          assert svc["correlation"]["attribution"]["confidence"] in ("high", "medium")
+          assert 4720 in ev_ids(admin), admin["correlation"]
+          group = next(c for c in r["changes"] if c["key"] == "group:S-1-5-32-544")
+          assert 4732 in ev_ids(group), group["correlation"]
+          task = next(c for c in r["changes"] if c["key"] == "\\WinVaultTest")
+          assert ev_ids(task) & {4698, 106}, task["correlation"]
+          assert not r["alerts"], r["alerts"]
+          print("service, user, group and task are each tied to their audit event")
       - name: Cleanup
         if: always()
         run: .\scripts\Test-WinVaultChanges.ps1 -Cleanup

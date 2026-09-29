@@ -38,6 +38,9 @@ class Change:
     score: int = 0
     level: str = "low"
     reasons: list[str] = field(default_factory=list)
+    # Filled in by the correlation engine (Phase 3)
+    evidence: list[dict] = field(default_factory=list)
+    attribution: dict | None = None
 
     @property
     def item(self) -> dict:
@@ -60,6 +63,10 @@ class Change:
                 "score": self.score,
                 "level": self.level,
                 "reasons": self.reasons,
+            },
+            "correlation": {
+                "attribution": self.attribution,
+                "evidence": self.evidence,
             },
         }
 
@@ -91,6 +98,9 @@ class ComparisonResult:
     summary: dict[str, CategorySummary] = field(default_factory=dict)
     changes: list[Change] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    alerts: list[dict] = field(default_factory=list)       # e.g. audit log cleared
+    timeline: list[dict] = field(default_factory=list)
+    event_window: dict | None = None
 
     @property
     def total_changes(self) -> int:
@@ -104,5 +114,8 @@ class ComparisonResult:
             "total_changes": self.total_changes,
             "summary": {k: v.to_dict() for k, v in self.summary.items()},
             "warnings": self.warnings,
+            "alerts": self.alerts,
+            "event_window": self.event_window,
+            "timeline": self.timeline,
             "changes": [c.to_dict() for c in self.changes],
         }

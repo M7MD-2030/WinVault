@@ -21,7 +21,7 @@ Detect → Filter → Analyze → Correlate → Explain → Report
 |---|---|---|
 | **1 — MVP** | Registry, Services, Scheduled Tasks, Users & Groups, Startup collectors · snapshot store · comparison engine · CLI | ✅ done |
 | **2** | Noise filtering · rule-based risk scoring · explanations | ✅ done |
-| 3 | Event Log collection · correlation · timeline | planned |
+| **3** | Event Log collection · correlation (who / when / which process) · timeline | ✅ done |
 | 4 | PySide6 GUI · dashboard · change details | planned |
 | 5 | HTML/PDF/JSON reports · file hashing · packaging (PyInstaller) | planned |
 
@@ -56,6 +56,36 @@ See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the full design.
 
 Add `--json report.json` for the full detail, including each finding's `analysis` block.
 
+## Correlation & timeline (Phase 3)
+
+`winvault compare` also reads the Windows Event Logs for the exact window between the baseline and now, stores them **inside the hash-protected snapshot**, and ties each finding to the evidence that names it:
+
+| Change | Evidence used |
+|---|---|
+| new / removed / changed user | Security 4720 · 4722 · 4724 · 4725 · 4726 · 4738 (matched on the account SID) |
+| group membership | Security 4732 · 4733 (matched on group SID + member SID) |
+| service | System 7045 · 7040, Security 4697 (service name / image path) |
+| scheduled task | Security 4698 · 4699 · 4702, Task Scheduler 106 · 140 · 141 (task path) |
+| responsible process | Security 4688 whose command line names the object (whole-word match) |
+| anti-forensics | Security 1102 / System 104 — **audit log cleared** raises an alert |
+
+Links are made on the **target** (SID, service, task path) — never on "the last process that ran before it", which is how tools confidently blame the wrong program. Every finding carries an honest confidence:
+
+- **high**: an audit event and a process command line both name the object
+- **medium**: an audit event gives who + when, but the process is unknown
+- **low**: only the artifact's own timestamp (e.g. registry key last-write time)
+- **none**: nothing in the logs relates to it, and the report says so
+
+```
+[MED ]  30p [+] services  WinVaultTestSvc
+        +30 new service registered
+        when: 2026-09-30 05:42:03  (event 7045)
+        who:  analyst   process: C:\Windows\System32\sc.exe   confidence: high
+        cmd:  sc.exe create WinVaultTestSvc binPath= "C:\Windows\System32\notepad.exe" start= demand
+```
+
+`--timeline` prints everything in order: process starts, audit events and the changes they produced. Windows doesn't record most of this by default, so run **`scripts\Enable-WinVaultAuditing.ps1`** once (as admin). WinVault warns you when auditing is off instead of silently guessing.
+
 ## Evidence handling
 
 Every snapshot is written once as JSON and its SHA-256 is recorded in `index.json`. Every load re-hashes the file and refuses to use it if it has changed, and `winvault verify` checks the whole store. Volatile fields such as timestamps are kept as evidence but never count as a "modification".
@@ -83,6 +113,9 @@ winvault verify                    # re-hash every snapshot (tamper check)
 winvault diff <idA> <idB>          # compare two stored snapshots
 winvault diff a.json b.json        # compare snapshot files — works on Linux too
 winvault compare --only registry,tasks
+winvault compare --timeline        # chronological evidence view
+winvault compare --show-noise      # include changes filtered as normal Windows activity
+winvault compare --no-events       # skip Event Log correlation
 ```
 
 The snapshot store defaults to `%ProgramData%\WinVault`. Override it with `--store DIR` or `WINVAULT_STORE`.

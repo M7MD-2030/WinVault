@@ -53,8 +53,14 @@ def host_info() -> dict:
 
 
 def take_snapshot(kind: str = "snapshot", label: str | None = None,
-                  only: list[str] | None = None, progress=None) -> dict:
-    """Run the collectors and return a snapshot dict (not yet saved)."""
+                  only: list[str] | None = None, progress=None,
+                  events_since: str | None = None) -> dict:
+    """Run the collectors and return a snapshot dict (not yet saved).
+
+    With ``events_since`` (an ISO time, normally the baseline's creation time),
+    the Event Log evidence for [events_since, now] is embedded in the snapshot so
+    it is hash-protected together with everything else.
+    """
     names = only or list(ALL_COLLECTORS)
     started = datetime.now(timezone.utc)
     collectors: dict[str, dict] = {}
@@ -74,7 +80,7 @@ def take_snapshot(kind: str = "snapshot", label: str | None = None,
         collectors[name]["duration_s"] = round((datetime.now(timezone.utc) - t0).total_seconds(), 3)
 
     stamp = started.strftime("%Y%m%dT%H%M%SZ")
-    return {
+    snapshot = {
         "format": SNAPSHOT_FORMAT,
         "id": f"{stamp}-{kind}-{uuid.uuid4().hex[:6]}",
         "kind": kind,
@@ -84,6 +90,12 @@ def take_snapshot(kind: str = "snapshot", label: str | None = None,
         "host": host_info(),
         "collectors": collectors,
     }
+    if events_since:
+        from .events import collect_events  # local import keeps collectors import-light
+        if progress:
+            progress("collecting event logs ...")
+        snapshot["events"] = collect_events(events_since, datetime.now(timezone.utc))
+    return snapshot
 
 
 class SnapshotStore:

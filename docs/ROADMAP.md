@@ -53,7 +53,11 @@
 - [x] Background worker thread (UI never freezes), elevation / alert / coverage banner
 - [x] Headless smoke tests (Qt offscreen) run in CI on Windows
 
-## Phase 5 — Reporting & packaging
-- [ ] HTML (Jinja2) + JSON report, PDF via HTML
-- [ ] Critical file hashing (hosts, lsass/winlogon binaries, etc.)
-- [ ] PyInstaller one-file `WinVault.exe` with UAC manifest (`--uac-admin`)
+## Phase 5 — Reporting & packaging ✅
+- [x] `winvault/report.py`: self-contained HTML report (no external assets, all values HTML-escaped),
+      print CSS for PDF via the browser; `--html` in the CLI, *Export Report…* in the app
+- [x] `files` collector: SHA-256 of critical config files (`drivers\etc\hosts` etc.) + scoring rule
+- [x] `.github/workflows/release.yml`: on each published release, PyInstaller builds `WinVault.exe`
+      (windowed) and `winvault-cli.exe` (console, Qt excluded), both with a UAC manifest,
+      smoke-tests the CLI binary, and attaches them with `SHA256SUMS.txt`
+- [ ] Later: code-signing the binaries, hashing more OS files, Sysmon / PowerShell 4104 evidence

@@ -12,8 +12,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QAction, QColor, QFont
+from PySide6.QtCore import Qt, QUrl
+from PySide6.QtGui import QAction, QColor, QDesktopServices, QFont
 from PySide6.QtWidgets import (
     QAbstractItemView, QCheckBox, QFileDialog, QFrame, QHBoxLayout, QHeaderView, QInputDialog, QLabel,
     QLineEdit, QMainWindow, QMessageBox, QProgressBar, QPushButton, QSplitter, QTableWidget,
@@ -88,14 +88,17 @@ class MainWindow(QMainWindow):
         self.act_baseline = QAction("Create Baseline", self, triggered=self.on_baseline)
         self.act_compare = QAction("Compare Now", self, triggered=self.on_compare)
         self.act_diff = QAction("Compare Snapshots…", self, triggered=self.on_diff_selected)
+        self.act_report = QAction("Export Report…", self, triggered=self.on_export_report)
         self.act_export = QAction("Export JSON…", self, triggered=self.on_export)
         self.act_store = QAction("Snapshot Store…", self, triggered=self.on_choose_store)
         for act in (self.act_baseline, self.act_compare, self.act_diff):
             tb.addAction(act)
         tb.addSeparator()
+        tb.addAction(self.act_report)
         tb.addAction(self.act_export)
         tb.addAction(self.act_store)
         self.act_export.setEnabled(False)
+        self.act_report.setEnabled(False)
         live = is_windows()
         for act in (self.act_baseline, self.act_compare):
             act.setEnabled(live)
@@ -311,6 +314,19 @@ class MainWindow(QMainWindow):
                                   encoding="utf-8")
             self.statusBar().showMessage(f"Report written to {path}")
 
+    def on_export_report(self) -> None:
+        if not self.inv:
+            return
+        from ..report import render_html, snapshot_hashes
+        default = str(Path.home() / f"winvault-report-{self.inv.result.current_id}.html")
+        path, _ = QFileDialog.getSaveFileName(self, "Export HTML report", default, "HTML (*.html)")
+        if not path:
+            return
+        hashes = snapshot_hashes(self.store, self.inv.baseline["id"], self.inv.current["id"])
+        Path(path).write_text(render_html(self.inv, hashes), encoding="utf-8")
+        self.statusBar().showMessage(f"Report written to {path} — open it and Print → Save as PDF for a PDF")
+        QDesktopServices.openUrl(QUrl.fromLocalFile(path))
+
     def on_choose_store(self) -> None:
         path = QFileDialog.getExistingDirectory(self, "Choose snapshot store", str(self.store.root))
         if path:
@@ -333,6 +349,7 @@ class MainWindow(QMainWindow):
         self._fill_findings()
         self._fill_timeline()
         self.act_export.setEnabled(True)
+        self.act_report.setEnabled(True)
         self.tabs.setCurrentIndex(0)
         self._refresh_snapshots()
         self.statusBar().showMessage(f"Done — {s.signal} findings to review, {s.noise} noise filtered")

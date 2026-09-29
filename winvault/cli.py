@@ -167,6 +167,11 @@ def _report(baseline: dict, current: dict, args) -> int:
     inv = investigate(baseline, current)
     result = inv.result
     print_result(result, inv.stats, args.show, show_noise=args.show_noise, timeline=args.timeline)
+    if args.html:
+        from .report import render_html, snapshot_hashes
+        hashes = snapshot_hashes(SnapshotStore(args.store), baseline["id"], current["id"])
+        Path(args.html).write_text(render_html(inv, hashes), encoding="utf-8")
+        print(f"\nHTML report written to {args.html}  (open it and Print -> Save as PDF for a PDF)")
     if args.json:
         Path(args.json).write_text(json.dumps(result.to_dict(), indent=2, ensure_ascii=False), encoding="utf-8")
         print(f"\nJSON report written to {args.json}")
@@ -213,6 +218,7 @@ def build_parser() -> argparse.ArgumentParser:
         sp.add_argument("--show-noise", action="store_true", help="also show changes filtered as noise")
         sp.add_argument("--timeline", action="store_true", help="print a chronological timeline of the evidence")
         sp.add_argument("--json", metavar="FILE", help="write the full comparison as JSON")
+        sp.add_argument("--html", metavar="FILE", help="write a self-contained HTML report (print it to PDF)")
 
     sp = sub.add_parser("baseline", help="capture a new baseline")
     capture_opts(sp)
@@ -242,11 +248,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def cmd_gui(args) -> int:
-    try:
-        from .gui import main as gui_main
-    except ImportError as exc:
-        print(f"error: the GUI needs PySide6 — run: pip install -e \".[gui]\"  ({exc})", file=sys.stderr)
+    import importlib.util
+    if importlib.util.find_spec("PySide6") is None:
+        print("error: the desktop app needs PySide6 — run: pip install -e \".[gui]\"  "
+              "(or use WinVault.exe from the GitHub release)", file=sys.stderr)
         return 1
+    from .gui import main as gui_main
     return gui_main(store=args.store)
 
 

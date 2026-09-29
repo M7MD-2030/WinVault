@@ -106,11 +106,22 @@ def change_details_html(change: Change) -> str:
                      "".join(f"<li>{html.escape(r)}</li>" for r in change.reasons) + "</ul>")
 
     if change.status is ChangeStatus.MODIFIED and change.fields:
-        rows = "".join(f"<tr><td style='padding:2px 12px 2px 0;color:#9aa1ab'>{html.escape(f.name)}</td>"
-                       f"<td style='padding:2px 12px 2px 0'>{_e(f.before)}</td>"
-                       f"<td style='padding:2px 0'>{_e(f.after)}</td></tr>" for f in change.fields)
+        rows = []
+        for f in change.fields:
+            if isinstance(f.before, list) and isinstance(f.after, list):
+                # lists (e.g. group members): show only the delta
+                added = [x for x in f.after if x not in f.before]
+                removed = [x for x in f.before if x not in f.after]
+                delta = "<br>".join([f"<span style='color:#46a758'>+ {html.escape(str(x))}</span>" for x in added] +
+                                    [f"<span style='color:#e5484d'>− {html.escape(str(x))}</span>" for x in removed])
+                rows.append(f"<tr><td style='padding:2px 12px 2px 0;color:#9aa1ab'>{html.escape(f.name)}</td>"
+                            f"<td colspan='2' style='padding:2px 0'>{delta or 'order changed'}</td></tr>")
+            else:
+                rows.append(f"<tr><td style='padding:2px 12px 2px 0;color:#9aa1ab'>{html.escape(f.name)}</td>"
+                            f"<td style='padding:2px 12px 2px 0'>{_e(f.before)}</td>"
+                            f"<td style='padding:2px 0'>{_e(f.after)}</td></tr>")
         parts.append("<h4>What changed</h4><table><tr><th align='left'>Field</th><th align='left'>Before</th>"
-                     f"<th align='left'>After</th></tr>{rows}</table>")
+                     f"<th align='left'>After</th></tr>{''.join(rows)}</table>")
     else:
         item = change.item
         visible = [(k, _e(v)) for k, v in item.items() if not k.startswith("_")]

@@ -23,7 +23,7 @@ Detect → Filter → Analyze → Correlate → Explain → Report
 | **2** | Noise filtering · rule-based risk scoring · explanations | ✅ done |
 | **3** | Event Log collection · correlation (who / when / which process) · timeline | ✅ done |
 | **4** | Desktop app (PySide6) · dashboard · change details · timeline · snapshot manager | ✅ done |
-| 5 | HTML/PDF/JSON reports · file hashing · packaging (PyInstaller) | planned |
+| **5** | HTML / PDF / JSON reports · critical file hashing · `WinVault.exe` releases | ✅ done |
 
 See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the full design.
 
@@ -36,6 +36,7 @@ See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the full design.
 | `tasks` | `%SystemRoot%\System32\Tasks` XML | actions, triggers, run-as principal, run level, hidden flag, SHA-256 |
 | `users` | Local users & groups | enabled, groups, admin membership, password metadata |
 | `startup` | All-users + per-profile Startup folders | SHA-256, size, timestamps |
+| `files` | Critical config files: `drivers\etc\hosts`, `networks`, `protocol`, `services`, `lmhosts.sam` | SHA-256 (catches same-size content edits), size, existence |
 
 ## Analysis (Phase 2)
 
@@ -136,6 +137,7 @@ winvault compare --only registry,tasks
 winvault compare --timeline        # chronological evidence view
 winvault compare --show-noise      # include changes filtered as normal Windows activity
 winvault compare --no-events       # skip Event Log correlation
+winvault compare --html report.html   # self-contained report (Print -> Save as PDF)
 ```
 
 The snapshot store defaults to `%ProgramData%\WinVault`. Override it with `--store DIR` or `WINVAULT_STORE`.
@@ -152,6 +154,17 @@ winvault compare
 ```
 
 CI runs this exact loop on a GitHub Windows runner on every push.
+
+## Reports & downloads (Phase 5)
+
+- **HTML report** (`--html report.html`, or *Export Report…* in the app) is one self-contained file with no external assets. It contains the host and snapshot metadata with SHA-256 hashes, severity summary, every finding with its explanation, attribution and evidence, the timeline, and an appendix listing exactly what was filtered as noise and why. For a PDF, open it in a browser and choose **Print → Save as PDF**. The print layout keeps each finding together.
+- **JSON** (`--json`) has the full machine-readable result, for scripting or SIEM import.
+- **Critical file integrity**: the `files` collector hashes key system configuration files, so a changed `hosts` file is flagged even when its size and name stay the same.
+- **No Python needed**: every GitHub release includes **`WinVault.exe`** (desktop app) and **`winvault-cli.exe`**, built and smoke-tested by CI, with a `SHA256SUMS.txt` so you can verify the download:
+  ```powershell
+  Get-FileHash .\WinVault.exe -Algorithm SHA256   # compare with SHA256SUMS.txt
+  ```
+  Both request Administrator rights when launched.
 
 ## Lab setup
 

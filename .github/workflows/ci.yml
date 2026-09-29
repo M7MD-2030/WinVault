@@ -44,7 +44,7 @@ jobs:
       - name: Make test changes
         run: .\scripts\Test-WinVaultChanges.ps1
       - name: Compare
-        run: winvault --store "$env:RUNNER_TEMP\wv" compare --json "$env:RUNNER_TEMP\report.json" --show 30 --timeline
+        run: winvault --store "$env:RUNNER_TEMP\wv" compare --json "$env:RUNNER_TEMP\report.json" --html "$env:RUNNER_TEMP\report.html" --show 30 --timeline
       - name: Assert detections
         shell: python
         run: |
@@ -86,6 +86,12 @@ jobs:
           assert ev_ids(task) & {4698, 106}, task["correlation"]
           assert not r["alerts"], r["alerts"]
           print("service, user, group and task are each tied to their audit event")
+
+          # Phase 5: critical files were hashed and the HTML report was written.
+          assert "files" in r["summary"], r["summary"].keys()
+          html = open(os.path.join(os.environ["RUNNER_TEMP"], "report.html"), encoding="utf-8").read()
+          assert "wv_testuser" in html and "Timeline" in html
+          print("critical files hashed and HTML report generated")
       - name: Cleanup
         if: always()
         run: .\scripts\Test-WinVaultChanges.ps1 -Cleanup

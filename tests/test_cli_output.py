@@ -21,3 +21,12 @@ def test_list_field_shows_only_delta():
 
 def test_scalar_field():
     assert describe_field(FieldChange("start_type", "auto", "disabled")) == ['start_type: auto  ->  disabled']
+
+
+def test_gui_command_without_pyside_is_friendly(monkeypatch, capsys):
+    import importlib.util
+    from winvault.cli import main
+    real = importlib.util.find_spec
+    monkeypatch.setattr(importlib.util, "find_spec", lambda n, *a: None if n == "PySide6" else real(n, *a))
+    assert main(["gui"]) == 1
+    assert "needs PySide6" in capsys.readouterr().err

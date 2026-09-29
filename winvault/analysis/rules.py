@@ -162,6 +162,22 @@ def service_disabled(change: Change):
     return None
 
 
+# ---- file integrity -----------------------------------------------------------
+
+@rule("critical-file-changed")
+def critical_file_changed(change: Change):
+    if change.category != "files":
+        return None
+    name = re.split(r"[\\/]", str(change.item.get("path", "")))[-1].lower()
+    if change.status is ChangeStatus.MODIFIED and "sha256" in change.field_names():
+        if name == "hosts":
+            return 50, "hosts file content changed (name resolution can be redirected)"
+        return 40, "critical system file content changed"
+    if change.status is ChangeStatus.MODIFIED and "exists" in change.field_names():
+        return 40, "critical system file created or deleted"
+    return None
+
+
 def _field(change: Change, name: str):
     for f in change.fields:
         if f.name == name:

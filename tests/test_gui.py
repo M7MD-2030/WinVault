@@ -42,6 +42,7 @@ def test_window_shows_investigation(app, tmp_path):
     assert w.timeline.rowCount() > 6
     assert "wv_testuser" in w.details.toPlainText()             # first row auto-selected
     assert w.act_export.isEnabled()
+    assert w.act_report.isEnabled()
 
 
 def test_filter_and_selection_details(app, tmp_path):

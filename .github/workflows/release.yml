@@ -1,0 +1,64 @@
+name: Release binaries
+
+# Runs when a GitHub release is published (e.g. `gh release create v1.0.0 ...`).
+# Builds WinVault.exe (desktop app) and winvault-cli.exe on Windows, smoke-tests
+# them, and attaches both plus SHA256SUMS.txt to that release.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: pip install ".[gui]" "pyinstaller>=6.6"
+
+      - name: Build WinVault.exe (desktop app)
+        run: >
+          pyinstaller packaging/gui_entry.py --name WinVault --onefile --windowed
+          --uac-admin --noconfirm --clean
+
+      - name: Build winvault-cli.exe (command line)
+        run: >
+          pyinstaller packaging/cli_entry.py --name winvault-cli --onefile --console
+          --uac-admin --noconfirm --exclude-module PySide6 --exclude-module shiboken6
+
+      - name: Smoke-test the CLI binary
+        run: |
+          .\dist\winvault-cli.exe --version
+          .\dist\winvault-cli.exe --store "$env:RUNNER_TEMP\wv" baseline --label release-check
+          .\dist\winvault-cli.exe --store "$env:RUNNER_TEMP\wv" compare --no-events --html "$env:RUNNER_TEMP\r.html"
+          if (-not (Test-Path "$env:RUNNER_TEMP\r.html")) { throw "report not written" }
+
+      - name: Checksums
+        shell: pwsh
+        run: |
+          Get-ChildItem dist\*.exe | ForEach-Object {
+            "{0}  {1}" -f (Get-FileHash $_ -Algorithm SHA256).Hash.ToLower(), $_.Name
+          } | Set-Content dist\SHA256SUMS.txt -Encoding ascii
+          Get-Content dist\SHA256SUMS.txt
+
+      - name: Attach to release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" dist\WinVault.exe dist\winvault-cli.exe dist\SHA256SUMS.txt --clobber
+
+      - name: Keep as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: winvault-windows
+          path: |
+            dist/WinVault.exe
+            dist/winvault-cli.exe
+            dist/SHA256SUMS.txt

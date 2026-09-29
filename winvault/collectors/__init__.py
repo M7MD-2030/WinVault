@@ -1,6 +1,7 @@
 """Collector registry. Add new collectors here to include them in snapshots."""
 
 from .base import Collector, CollectorError
+from .files import CriticalFilesCollector
 from .registry import RegistryCollector
 from .services import ServicesCollector
 from .startup import StartupCollector
@@ -15,6 +16,7 @@ ALL_COLLECTORS: dict[str, type[Collector]] = {
         ScheduledTasksCollector,
         UsersCollector,
         StartupCollector,
+        CriticalFilesCollector,
     )
 }
 

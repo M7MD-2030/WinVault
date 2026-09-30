@@ -2,6 +2,14 @@
 
 All notable changes to WinVault. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.0.2] — 2026-10-01
+### Added
+- `winvault install` now **pins WinVault to the taskbar** on Windows 11 (from an Administrator terminal), next to File Explorer, with its icon. Your existing pins are kept. It uses Windows' own taskbar-layout setting for the current user, and restarts Explorer once so the pin shows up straight away. `--no-pin` skips it.
+- `winvault uninstall` removes the taskbar pin and that setting again.
+
+### Changed
+- When it can't pin automatically (Windows 10, a non-admin install, or a taskbar layout your organization already manages), `install` says why and how to pin it by hand.
+
 ## [1.0.1] — 2026-09-30
 ### Added
 - `winvault install` also adds a **WinVault** Start menu entry for the desktop app, so it can be searched and pinned to the taskbar. `uninstall` removes it.

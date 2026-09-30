@@ -55,7 +55,7 @@ jobs:
       - name: Smoke-test install (winvault usable from a new shell by name)
         run: |
           $ErrorActionPreference = 'Stop'
-          .\dist\winvault.exe install --dir "$env:RUNNER_TEMP\wvbin"
+          .\dist\winvault.exe install --dir "$env:RUNNER_TEMP\wvbin" --no-pin
           $machine = [Environment]::GetEnvironmentVariable('Path', 'Machine')
           $user = [Environment]::GetEnvironmentVariable('Path', 'User')
           $env:Path = "$machine;$user"

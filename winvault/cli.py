@@ -41,7 +41,7 @@ examples:
   winvault list                              stored snapshots
   winvault status                            store, elevation and audit settings at a glance
   winvault audit --enable                    one time: turn on evidence auditing (admin)
-  winvault install                           put winvault.exe on PATH (standalone .exe)
+  winvault install                           put winvault.exe on PATH, pin the app to the taskbar
 
 Run from an Administrator terminal for complete results.
 """
@@ -348,12 +348,21 @@ def cmd_audit(args) -> int:
 def cmd_install(args) -> int:
     from .install import install
     try:
-        target, system_wide = install(Path(args.dir) if args.dir else None)
+        target, system_wide, pin = install(Path(args.dir) if args.dir else None, pin=not args.no_pin)
     except (RuntimeError, OSError) as exc:
         err(str(exc))
         return EXIT_ERROR
     scope = "all users (system PATH)" if system_wide else "your account (user PATH)"
     print(c(f"Installed to {target}", "92") + f" and added to PATH for {scope}.")
+    if pin is not None or (target / "WinVault-GUI.exe").exists():
+        print("Added WinVault to the Start menu.")
+    if pin in ("pinned", "already"):
+        print(c("WinVault is pinned to the taskbar.", "92"))
+    elif pin == "next-sign-in":
+        print("WinVault will appear on the taskbar after you sign out and back in.")
+    elif pin and pin.startswith("manual:"):
+        print(f"Not pinned to the taskbar ({pin[7:]}).\n"
+              "  To pin it: open Start, search WinVault, right-click it -> Pin to taskbar.")
     print("Open a NEW terminal and run:  winvault --help")
     return EXIT_OK
 
@@ -438,6 +447,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = sub.add_parser("install", help="put the standalone winvault.exe on PATH")
     sp.add_argument("--dir", help="install folder (default: Program Files as admin, else your user folder)")
+    sp.add_argument("--no-pin", action="store_true", help="don't pin the desktop app to the taskbar")
     sp.set_defaults(func=cmd_install)
     sub.add_parser("uninstall", help="remove winvault.exe from PATH (keeps snapshots)").set_defaults(func=cmd_uninstall)
 

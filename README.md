@@ -42,7 +42,7 @@ Get-FileHash .\winvault.exe -Algorithm SHA256
 ```powershell
 .\winvault.exe install
 ```
-This also adds **WinVault** to the Start menu (search it, right-click → *Pin to taskbar*) when `WinVault-GUI.exe` is in the same folder. Then open a **new** Administrator terminal. As admin, it goes to `C:\Program Files\WinVault` for all users; without admin, it goes to your user folder, no admin needed.
+When `WinVault-GUI.exe` is in the same folder, this also adds **WinVault** to the Start menu and, on Windows 11, **pins it to the taskbar** with its icon (Explorer restarts once, and your other pins are kept; use `--no-pin` to skip). On Windows 10, pin it by hand: search WinVault in Start → right-click → *Pin to taskbar*. Then open a **new** Administrator terminal. As admin, it goes to `C:\Program Files\WinVault` for all users; without admin, it goes to your user folder, no admin needed.
 
 **3. Use it:**
 ```powershell
@@ -68,7 +68,7 @@ winvault compare --html report.html  # same, plus an HTML report (Print → Save
 | `winvault verify` | Re-check every snapshot's SHA-256 (tamper check) |
 | `winvault status` | Store, elevation and audit settings at a glance |
 | `winvault audit [--enable]` | Show or enable the audit settings WinVault uses as evidence |
-| `winvault install` / `uninstall` | Put `winvault.exe` on PATH / remove it (snapshots are kept) |
+| `winvault install` / `uninstall` | Put `winvault.exe` on PATH and pin the app to the taskbar / remove both (snapshots are kept) |
 | `winvault gui` | Open the desktop app |
 
 Options for `compare` and `diff`:

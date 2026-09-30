@@ -8,7 +8,7 @@
   then runs `winvault install`:
     - copies both to C:\Program Files\WinVault (from an Administrator terminal)
     - puts winvault on PATH
-    - adds WinVault to the Start menu (pinnable to the taskbar)
+    - adds WinVault to the Start menu and pins it to the taskbar (Windows 11)
 
   Safe to run again for every new version. Snapshots are never touched.
 

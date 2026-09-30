@@ -5,6 +5,11 @@ from any terminal, like `ls` or `git`.
   it to the system PATH (all users).
 - Otherwise: installs to %LOCALAPPDATA%\\Programs\\WinVault and adds it to the
   user PATH (no admin needed).
+
+It also adds WinVault to the Start menu and, on Windows 11 from an Administrator
+terminal, pins it to the taskbar next to File Explorer. Windows has no API that
+lets a program pin itself, so this uses the documented taskbar-layout policy
+(the same mechanism IT departments use), scoped to the current user.
 """
 
 from __future__ import annotations
@@ -20,6 +25,9 @@ EXE_NAME = "winvault.exe"
 GUI_NAME = "WinVault-GUI.exe"
 MACHINE_ENV = r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment"
 USER_ENV = "Environment"
+POLICY_KEY = r"Software\Policies\Microsoft\Windows\Explorer"
+LAYOUT_NAME = "TaskbarLayout.xml"
+WIN11_BUILD = 22000
 
 
 def add_to_path(path_value: str, entry: str) -> str:
@@ -79,8 +87,9 @@ def _broadcast_env_change() -> None:
         pass
 
 
-def install(target: Path | None = None) -> tuple[Path, bool]:
-    """Copy the running winvault.exe (and WinVault-GUI.exe if next to it) and add to PATH."""
+def install(target: Path | None = None, pin: bool = True) -> tuple[Path, bool, str | None]:
+    """Copy the running winvault.exe (and WinVault-GUI.exe if next to it), add to PATH,
+    add the Start menu entry and pin it to the taskbar. Returns (folder, system_wide, pin_status)."""
     if sys.platform != "win32":
         raise RuntimeError("install is only for the Windows winvault.exe")
     if not getattr(sys, "frozen", False):
@@ -95,9 +104,12 @@ def install(target: Path | None = None) -> tuple[Path, bool]:
     if gui.exists() and gui.resolve() != (target / GUI_NAME).resolve():
         shutil.copy2(gui, target / GUI_NAME)
     _write_path(system_wide, add_to_path(_read_path(system_wide), str(target)))
+    pin_status = None
     if (target / GUI_NAME).exists():
-        create_shortcut(start_menu_shortcut(system_wide), target / GUI_NAME)
-    return target, system_wide
+        link = start_menu_shortcut(system_wide)
+        if create_shortcut(link, target / GUI_NAME) and pin:
+            pin_status = pin_to_taskbar(link, target)
+    return target, system_wide, pin_status
 
 
 def start_menu_shortcut(system_wide: bool) -> Path:
@@ -127,11 +139,138 @@ def create_shortcut(link: Path, target: Path) -> bool:
         return False
 
 
+# ── Taskbar pin ────────────────────────────────────────────────────────────────
+
+def taskbar_pins_dir() -> Path:
+    """Where Explorer keeps the current user's pinned taskbar shortcuts."""
+    base = Path(os.environ.get("APPDATA", str(Path.home() / "AppData" / "Roaming")))
+    return base / "Microsoft" / "Internet Explorer" / "Quick Launch" / "User Pinned" / "TaskBar"
+
+
+def is_pinned() -> bool:
+    d = taskbar_pins_dir()
+    return d.is_dir() and any(f.name.lower().startswith("winvault") for f in d.glob("*.lnk"))
+
+
+def taskbar_layout_xml(link: Path) -> str:
+    """Taskbar layout that *appends* WinVault to the user's existing pins (nothing is removed)."""
+    from xml.sax.saxutils import quoteattr
+    return (
+        '<?xml version="1.0" encoding="utf-8"?>\n'
+        '<LayoutModificationTemplate\n'
+        '    xmlns="http://schemas.microsoft.com/Start/2014/LayoutModification"\n'
+        '    xmlns:defaultlayout="http://schemas.microsoft.com/Start/2014/FullDefaultLayout"\n'
+        '    xmlns:start="http://schemas.microsoft.com/Start/2014/StartLayout"\n'
+        '    xmlns:taskbar="http://schemas.microsoft.com/Start/2014/TaskbarLayout"\n'
+        '    Version="1">\n'
+        '  <CustomTaskbarLayoutCollection PinListPlacement="Append">\n'
+        '    <defaultlayout:TaskbarLayout>\n'
+        '      <taskbar:TaskbarPinList>\n'
+        f'        <taskbar:DesktopApp DesktopApplicationLinkPath={quoteattr(str(link))} />\n'
+        '      </taskbar:TaskbarPinList>\n'
+        '    </defaultlayout:TaskbarLayout>\n'
+        '  </CustomTaskbarLayoutCollection>\n'
+        '</LayoutModificationTemplate>\n'
+    )
+
+
+def _windows_build() -> int:
+    try:
+        return sys.getwindowsversion().build          # type: ignore[attr-defined]
+    except AttributeError:
+        return 0
+
+
+def _read_policy() -> str | None:
+    import winreg
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, POLICY_KEY) as k:
+            return str(winreg.QueryValueEx(k, "StartLayoutFile")[0])
+    except OSError:
+        return None
+
+
+def _same_file(a: str | Path, b: str | Path) -> bool:
+    return os.path.normcase(os.path.expandvars(str(a))) == os.path.normcase(str(b))
+
+
+def _restart_shell() -> None:
+    """Restart Explorer so the taskbar reloads. Windows starts it again by itself (non-elevated)."""
+    import subprocess
+    import time
+    subprocess.run(["taskkill.exe", "/f", "/im", "explorer.exe"], capture_output=True, check=False)
+    for _ in range(20):                               # Windows normally brings it back within ~2 s
+        time.sleep(0.5)
+        out = subprocess.run(["tasklist.exe", "/fi", "imagename eq explorer.exe", "/nh"],
+                             capture_output=True, text=True, check=False).stdout
+        if "explorer.exe" in out.lower():
+            return
+    subprocess.Popen(["explorer.exe"])                # AutoRestartShell is off: start it ourselves
+
+
+def pin_to_taskbar(link: Path, layout_dir: Path) -> str:
+    """Pin the Start menu shortcut to the taskbar. Returns one of:
+    "already", "pinned", "next-sign-in", "manual:<reason>"."""
+    if is_pinned():
+        return "already"
+    if _windows_build() < WIN11_BUILD:
+        # On Windows 10 this policy would also lock the Start menu tiles — not worth it.
+        return "manual:Windows 10 doesn't let programs pin themselves"
+    existing = _read_policy()
+    layout = layout_dir / LAYOUT_NAME
+    if existing and _same_file(existing, layout) and layout.exists():
+        return "manual:you unpinned it earlier, so it was left off"     # Windows applies a layout once
+    if existing and not _same_file(existing, layout):
+        return "manual:a taskbar layout is already set by your organization"
+    try:
+        import winreg
+        layout.write_text(taskbar_layout_xml(link), encoding="utf-8")
+        with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, POLICY_KEY, 0, winreg.KEY_SET_VALUE) as k:
+            winreg.SetValueEx(k, "LockedStartLayout", 0, winreg.REG_DWORD, 1)
+            winreg.SetValueEx(k, "StartLayoutFile", 0, winreg.REG_EXPAND_SZ, str(layout))
+    except OSError:
+        return "manual:run the install from an Administrator terminal to pin automatically"
+    _restart_shell()
+    import time
+    for _ in range(20):
+        if is_pinned():
+            return "pinned"
+        time.sleep(0.5)
+    return "next-sign-in"
+
+
+def unpin_from_taskbar() -> bool:
+    """Remove WinVault's taskbar pin and the layout policy (only if it is ours). True if a pin was removed."""
+    import winreg
+    existing = _read_policy()
+    if existing and Path(os.path.expandvars(existing)).name == LAYOUT_NAME and "winvault" in existing.lower():
+        try:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, POLICY_KEY, 0, winreg.KEY_SET_VALUE) as k:
+                for name in ("StartLayoutFile", "LockedStartLayout"):
+                    try:
+                        winreg.DeleteValue(k, name)
+                    except OSError:
+                        pass
+        except OSError:
+            pass
+    removed = False
+    d = taskbar_pins_dir()
+    if d.is_dir():
+        for f in d.glob("*.lnk"):
+            if f.name.lower().startswith("winvault"):
+                f.unlink(missing_ok=True)
+                removed = True
+    if removed:
+        _restart_shell()
+    return removed
+
+
 def uninstall() -> list[Path]:
     """Remove WinVault's folders from PATH and delete the installed files (snapshots are kept)."""
     if sys.platform != "win32":
         raise RuntimeError("uninstall is only for the Windows winvault.exe")
     removed = []
+    unpin_from_taskbar()
     for system_wide in ((True, False) if is_admin() else (False,)):
         folder = default_dir(system_wide)
         current = _read_path(system_wide)
@@ -139,7 +278,7 @@ def uninstall() -> list[Path]:
         if updated != ";".join(p for p in current.split(";") if p.strip()):
             _write_path(system_wide, updated)
         running = Path(sys.executable).resolve()
-        for name in (EXE_NAME, GUI_NAME):
+        for name in (EXE_NAME, GUI_NAME, LAYOUT_NAME):
             f = folder / name
             if f.exists() and f.resolve() != running:
                 f.unlink()

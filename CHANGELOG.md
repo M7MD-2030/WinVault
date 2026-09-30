@@ -10,6 +10,9 @@ All notable changes to WinVault. Versions follow [Semantic Versioning](https://s
 ### Changed
 - When it can't pin automatically (Windows 10, a non-admin install, or a taskbar layout your organization already manages), `install` says why and how to pin it by hand.
 
+### Fixed
+- `Update-WinVault.ps1` failed to parse in Windows PowerShell 5.1 (the built-in one) because of a non-ASCII character. All scripts are now plain ASCII, and a test keeps them that way.
+
 ## [1.0.1] — 2026-09-30
 ### Added
 - `winvault install` also adds a **WinVault** Start menu entry for the desktop app, so it can be searched and pinned to the taskbar. `uninstall` removes it.

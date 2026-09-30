@@ -41,7 +41,7 @@ try {
     }
     foreach ($f in 'winvault.exe', 'WinVault-GUI.exe') {
         $actual = (Get-FileHash (Join-Path $work $f) -Algorithm SHA256).Hash.ToLower()
-        if ($expected[$f] -ne $actual) { throw "$f checksum mismatch — download is corrupt or tampered. Nothing was installed." }
+        if ($expected[$f] -ne $actual) { throw "$f checksum mismatch - download is corrupt or tampered. Nothing was installed." }
         Write-Host "  OK  $f  $actual"
         Unblock-File (Join-Path $work $f)          # verified: skip the SmartScreen prompt
     }

@@ -5,5 +5,5 @@ security-relevant system state, capture it again later, and find out
 what changed.
 """
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 PROJECT_NAME = "WinVault — Digital Evidence & Forensic Analysis"

@@ -62,6 +62,11 @@ jobs:
           $found = (Get-Command winvault -ErrorAction Stop).Source
           "winvault resolved to $found"
           winvault --version
+          $lnk = "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\WinVault.lnk"
+          if (-not (Test-Path $lnk)) { throw "Start menu shortcut not created" }
+          $target = (New-Object -ComObject WScript.Shell).CreateShortcut($lnk).TargetPath
+          "Start menu shortcut -> $target"
+          if ($target -notlike "*WinVault-GUI.exe") { throw "shortcut points at $target" }
 
       - name: Checksums
         shell: pwsh

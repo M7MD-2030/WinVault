@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "winvault"
-version = "1.0.0"
+version = "1.0.1"
 description = "WinVault — Digital Evidence & Forensic Analysis: security-focused change analysis for Windows"
 readme = "README.md"
 license = { text = "MIT" }

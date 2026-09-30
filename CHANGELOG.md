@@ -2,6 +2,14 @@
 
 All notable changes to WinVault. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.0.1] — 2026-09-30
+### Added
+- `winvault install` also adds a **WinVault** Start menu entry for the desktop app, so it can be searched and pinned to the taskbar. `uninstall` removes it.
+- `scripts/Update-WinVault.ps1`: install or update to the latest release in one command, with SHA-256 verification against `SHA256SUMS.txt`.
+
+### Fixed
+- A pinned WinVault-GUI.exe and its running window no longer show up as two separate taskbar buttons.
+
 ## [1.0.0] — 2026-09-29
 
 First stable release, ready for everyday use on Windows 10/11 without a lab setup.

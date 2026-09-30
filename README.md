@@ -42,7 +42,7 @@ Get-FileHash .\winvault.exe -Algorithm SHA256
 ```powershell
 .\winvault.exe install
 ```
-Then open a **new** Administrator terminal. As admin, it goes to `C:\Program Files\WinVault` for all users; without admin, it goes to your user folder, no admin needed.
+This also adds **WinVault** to the Start menu (search it, right-click → *Pin to taskbar*) when `WinVault-GUI.exe` is in the same folder. Then open a **new** Administrator terminal. As admin, it goes to `C:\Program Files\WinVault` for all users; without admin, it goes to your user folder, no admin needed.
 
 **3. Use it:**
 ```powershell
@@ -52,6 +52,8 @@ winvault baseline --label "clean"    # capture a known-good state
 winvault compare                     # what changed, does it matter, who did it?
 winvault compare --html report.html  # same, plus an HTML report (Print → Save as PDF)
 ```
+
+> **Updating later:** download [`scripts/Update-WinVault.ps1`](scripts/Update-WinVault.ps1) and run it from an Administrator PowerShell. It fetches the latest release, verifies the SHA-256 and reinstalls. Your snapshots are kept.
 
 > The first time you run an unsigned new download, Windows SmartScreen may show *"Windows protected your PC"*. Click **More info → Run anyway** after checking the SHA-256.
 

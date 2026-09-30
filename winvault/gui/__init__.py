@@ -17,8 +17,11 @@ def main(store: str | None = None) -> int:
     from .main_window import MainWindow
     from .theme import apply_theme
 
-    if sys.platform == "win32":
-        # Own taskbar identity, so Windows shows the WinVault icon instead of Python's.
+    if sys.platform == "win32" and not getattr(sys, "frozen", False):
+        # Running from source under python.exe: give the window its own taskbar identity so
+        # Windows shows the WinVault icon instead of Python's. NOT done for WinVault-GUI.exe:
+        # there Windows already identifies it by the .exe, and an explicit ID would make a
+        # pinned taskbar shortcut and the running window show up as two separate buttons.
         try:
             import ctypes
             ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("M7MD-2030.WinVault")

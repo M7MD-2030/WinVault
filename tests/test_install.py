@@ -17,3 +17,12 @@ def test_remove_from_path_only_removes_ours():
     p = r"C:\A;C:\Program Files\WinVault\;C:\B"
     assert remove_from_path(p, r"C:\Program Files\WinVault") == r"C:\A;C:\B"
     assert remove_from_path(r"C:\A;C:\WinVaultOther", r"C:\WinVault") == r"C:\A;C:\WinVaultOther"
+
+
+def test_start_menu_shortcut_locations(monkeypatch):
+    from winvault.install import start_menu_shortcut
+    monkeypatch.setenv("ProgramData", r"C:\ProgramData")
+    monkeypatch.setenv("APPDATA", r"C:\Users\a\AppData\Roaming")
+    assert str(start_menu_shortcut(True)).replace("/", "\\").endswith(
+        r"C:\ProgramData\Microsoft\Windows\Start Menu\Programs\WinVault.lnk")
+    assert "Roaming" in str(start_menu_shortcut(False))

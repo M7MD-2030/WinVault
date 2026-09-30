@@ -95,7 +95,36 @@ def install(target: Path | None = None) -> tuple[Path, bool]:
     if gui.exists() and gui.resolve() != (target / GUI_NAME).resolve():
         shutil.copy2(gui, target / GUI_NAME)
     _write_path(system_wide, add_to_path(_read_path(system_wide), str(target)))
+    if (target / GUI_NAME).exists():
+        create_shortcut(start_menu_shortcut(system_wide), target / GUI_NAME)
     return target, system_wide
+
+
+def start_menu_shortcut(system_wide: bool) -> Path:
+    """Where the WinVault Start menu entry lives (searchable, and pinnable to the taskbar)."""
+    if system_wide:
+        base = Path(os.environ.get("ProgramData", r"C:\ProgramData"))
+    else:
+        base = Path(os.environ.get("APPDATA", str(Path.home() / "AppData" / "Roaming")))
+    return base / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "WinVault.lnk"
+
+
+def create_shortcut(link: Path, target: Path) -> bool:
+    """Create a .lnk via the WScript.Shell COM object (built into Windows, no extra modules).
+    Paths are passed through environment variables, so spaces/quotes can't break the command."""
+    import subprocess
+    script = ("$s = (New-Object -ComObject WScript.Shell).CreateShortcut($env:WV_LINK); "
+              "$s.TargetPath = $env:WV_TARGET; $s.WorkingDirectory = $env:WV_DIR; "
+              "$s.IconLocation = $env:WV_TARGET + ',0'; "
+              "$s.Description = 'WinVault - Digital Evidence & Forensic Analysis'; $s.Save()")
+    env = {**os.environ, "WV_LINK": str(link), "WV_TARGET": str(target), "WV_DIR": str(target.parent)}
+    try:
+        link.parent.mkdir(parents=True, exist_ok=True)
+        proc = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script],
+                              env=env, capture_output=True, timeout=60, check=False)
+        return proc.returncode == 0 and link.exists()
+    except (OSError, subprocess.TimeoutExpired):
+        return False
 
 
 def uninstall() -> list[Path]:
@@ -114,5 +143,6 @@ def uninstall() -> list[Path]:
             f = folder / name
             if f.exists() and f.resolve() != running:
                 f.unlink()
+        start_menu_shortcut(system_wide).unlink(missing_ok=True)
         removed.append(folder)
     return removed
